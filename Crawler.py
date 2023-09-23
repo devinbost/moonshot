@@ -32,6 +32,7 @@ class Crawler:
             return None
 
     def get_sitemap_urls(self, sitemap_url: str, onlyEnglish: bool):
+        # Need to fix issue where it doesn't detect if onlyEnglish has been changed and will use the wrong cache file.
         urls = self.load_urls_from_file()
         if urls is None:
             r = requests.get(sitemap_url)
@@ -99,7 +100,8 @@ class Crawler:
 
     async def update_UI(self, counter: int, progress_bar: DeltaGenerator):
         total_url_count = self.get_url_count()
-        percentage_completion = (counter + 1) / total_url_count
+        percentage_completion = ((counter + 1) / total_url_count) * 100
+        print(f"Completed {counter} out of {total_url_count} in total")
         print(f"Processing... Completion: {percentage_completion:.2f}%")
         progress_bar.progress(
             int(percentage_completion),
@@ -120,7 +122,7 @@ class Crawler:
     def async_crawl_and_ingest(self, sitemap_url: str, progress_bar: DeltaGenerator):
         if self.urls is None:
             # TODO: Need to cache the following step:
-            self.urls = self.get_sitemap_urls(sitemap_url, onlyEnglish=True)
+            self.urls = self.get_sitemap_urls(sitemap_url, onlyEnglish=False)
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)

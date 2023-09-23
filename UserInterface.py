@@ -3,6 +3,7 @@ import streamlit as st
 from Chatbot import Chatbot
 from Crawler import Crawler
 from DataAccess import DataAccess
+import time
 
 
 class UserInterface:
@@ -26,6 +27,10 @@ class UserInterface:
             self.data_access.loadWikipediaData()
         if st.button("Crawl IBM docs"):
             progress_bar = st.progress(0, "Percentage completion of site crawling")
+            start = time.time()
             self.crawler.async_crawl_and_ingest(
                 "https://dataplatform.cloud.ibm.com/docs/sitemap.xml", progress_bar
             )
+            end = time.time()
+            completionTime = end - start  # Time elapsed in seconds
+            st.caption(f"Completed parsing IBM docs in {completionTime} seconds")
