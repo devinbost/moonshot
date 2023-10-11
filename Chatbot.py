@@ -1,4 +1,5 @@
-from langchain.chains import RetrievalQA
+from langchain import PromptTemplate
+from langchain.chains import ConversationalRetrievalChain
 from langchain.docstore.document import Document
 
 from DataAccess import DataAccess
@@ -14,8 +15,10 @@ from langchain.memory import ConversationBufferMemory
 class Chatbot:
     # Need to refactor this class at some point to support multiple LLM providers
     def __init__(self, data_access: DataAccess):
+        print("ran __init__ on Chatbot")
+        self.chat_history = []
         self.memory = ConversationBufferMemory(
-            return_messages=True
+            return_messages=True, memory_key="chat_history", output_key="answer"
         )  # Set to false if we want to return a string instead of a list
         provider = os.getenv("PROVIDER")
         self.data_access = data_access
@@ -38,9 +41,9 @@ class Chatbot:
             )
             self.langchain_model = WatsonxLLM(model=self.legacy_model)
         elif provider == "OPENAI":
-            self.langchain_model = ChatOpenAI(temperature=0, model_name="gpt-4")
+            self.langchain_model = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
 
-        self.rag_chain = RetrievalQA.from_chain_type(
+        self.rag_chain = ConversationalRetrievalChain.from_llm(
             llm=self.langchain_model,
             chain_type="stuff",
             retriever=self.data_access.vector_store.as_retriever(),
@@ -56,19 +59,12 @@ class Chatbot:
             print(f"""{row.page_content}\n""")
 
     def runInference(self, question: str) -> dict:
-        chat_history = ConversationBufferMemory(memory_key="chat_history")
-        template = f"""You are a nice chatbot having a conversation with a human.
-
-        Previous conversation:
-        {chat_history}
-
-        New human question: {question}
-        Response:"""
-        self.memory.chat_memory.add_user_message(question)
-        bot_response = self.rag_chain({"query": question})
+        bot_response = self.rag_chain(
+            {"question": question, "chat_history": self.chat_history}
+        )
+        self.chat_history.append((question, bot_response["answer"]))
         # Should I run vector search on the new query and then combine results with the prior?
         # Or, should I run vector search on the combined conversation?
         print(bot_response)
         # We may want to also capture bot_response["source_documents"] for analytics later
-        self.memory.chat_memory.add_ai_message(bot_response["result"])
         return bot_response

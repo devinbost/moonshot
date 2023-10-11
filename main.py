@@ -8,9 +8,11 @@ from UserInterface import UserInterface
 
 class Main:
     def __init__(self):
+        print("running __init__ in Main")
         self.isFirstRun = True
-        self.dataAccess = DataAccess()
-        self.crawler = Crawler(self.dataAccess)
+        self.dataAccess: DataAccess = DataAccess()
+        self.crawler: Crawler = Crawler(self.dataAccess)
+        self.chatbot: Chatbot = None
 
     def firstRun(self):
         if self.isFirstRun is True:
@@ -20,15 +22,18 @@ class Main:
             self.isFirstRun = False
 
     def startChatbot(self):
-        bot = Chatbot(self.dataAccess)
-        return bot
+        print("ran startChatbot")
+        if self.chatbot is None:
+            self.chatbot = Chatbot(self.dataAccess)
 
     def buildUI(self):
-        bot = self.startChatbot()
-        ui = UserInterface(self.dataAccess, bot, self.crawler)
+        print("ran buildUI")
+        self.startChatbot()
+        ui = UserInterface(self.dataAccess, self.chatbot, self.crawler)
         ui.render()
 
 
 if __name__ == "__main__":
+    print('running __name__ == "__main__"')
     main = Main()
     main.buildUI()

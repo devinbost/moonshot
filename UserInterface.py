@@ -8,12 +8,14 @@ import time
 
 class UserInterface:
     def __init__(self, data_access: DataAccess, chatbot: Chatbot, crawler: Crawler):
+        print("running __init__ on UserInterface")
         self.app_name = "Chatbot demo"
         self.data_access = data_access
         self.chatbot = chatbot
         self.crawler = crawler
 
     def render(self):
+        print("Running render")
         st.title(self.app_name)
 
         question = st.text_input("Ask a question for the chatbot")
