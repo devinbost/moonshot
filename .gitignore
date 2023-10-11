@@ -1,7 +1,9 @@
 .env
 devin.bost@datastax.com-token.json
 secure-connect-openai.zip
+secure-connect-vector-demo.zip
 urls.txt
+urls-ibm.txt
 20220301.simple.csv
 # Created by https://www.toptal.com/developers/gitignore/api/python
 # Edit at https://www.toptal.com/developers/gitignore?templates=python

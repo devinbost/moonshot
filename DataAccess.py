@@ -19,10 +19,13 @@ class DataAccess:
         self.vector_store = None
         self.keyspace = os.getenv("KEYSPACE")
         self.table_name = os.getenv("TABLE_NAME")
+        # self.embeddings = HuggingFaceEmbeddings(
+        #     model_name="all-mpnet-base-v2"
+        # )
         self.embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
         self.splitter = RecursiveCharacterTextSplitter(
-            chunk_size=250,
-            chunk_overlap=125,
+            chunk_size=4000,
+            chunk_overlap=2000,
             length_function=len,
             is_separator_regex=False,
         )

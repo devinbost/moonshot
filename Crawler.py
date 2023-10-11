@@ -122,7 +122,26 @@ class Crawler:
     def async_crawl_and_ingest(self, sitemap_url: str, progress_bar: DeltaGenerator):
         if self.urls is None:
             # TODO: Need to cache the following step:
-            self.urls = self.get_sitemap_urls(sitemap_url, onlyEnglish=False)
+            self.urls = self.get_sitemap_urls(sitemap_url, onlyEnglish=True)
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(self.process_urls(progress_bar))
+        finally:
+            loop.close()
+
+    def async_crawl_and_ingest_list(
+        self, sitemap_url_list: list[str], progress_bar: DeltaGenerator
+    ):
+        if self.urls is None:
+            # TODO: Need to cache the following step:
+            all_urls = [
+                url
+                for sitemap in sitemap_url_list
+                for url in self.get_sitemap_urls(sitemap, onlyEnglish=True)
+            ]
+            self.urls = all_urls
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)

@@ -8,7 +8,7 @@ import time
 
 class UserInterface:
     def __init__(self, data_access: DataAccess, chatbot: Chatbot, crawler: Crawler):
-        self.app_name = "IBM Watson demo"
+        self.app_name = "Chatbot demo"
         self.data_access = data_access
         self.chatbot = chatbot
         self.crawler = crawler
@@ -25,12 +25,26 @@ class UserInterface:
             self.data_access.vector_store.clear()
         if st.button("Load Wikipedia dataset"):
             self.data_access.loadWikipediaData()
-        if st.button("Crawl IBM docs"):
+        if st.button("Crawl docs"):
             progress_bar = st.progress(0, "Percentage completion of site crawling")
             start = time.time()
             self.crawler.async_crawl_and_ingest(
                 "https://dataplatform.cloud.ibm.com/docs/sitemap.xml", progress_bar
             )
+            end = time.time()
+            completionTime = end - start  # Time elapsed in seconds
+            st.caption(f"Completed parsing IBM docs in {completionTime} seconds")
+        if st.button("Crawl LDS docs"):
+            progress_bar = st.progress(0, "Percentage completion of site crawling")
+            start = time.time()
+            sitemapList = [
+                "https://sitemaps.churchofjesuschrist.org/sitemap-service/www.churchofjesuschrist.org/en/sitemap_1.xml",
+                "https://sitemaps.churchofjesuschrist.org/sitemap-service/www.churchofjesuschrist.org/en/sitemap_2.xml",
+                "https://sitemaps.churchofjesuschrist.org/sitemap-service/www.churchofjesuschrist.org/en/sitemap_3.xml",
+                "https://sitemaps.churchofjesuschrist.org/sitemap-service/www.churchofjesuschrist.org/en/sitemap_4.xml",
+                "https://sitemaps.churchofjesuschrist.org/sitemap-service/www.churchofjesuschrist.org/en/sitemap_5.xml",
+            ]
+            self.crawler.async_crawl_and_ingest_list(sitemapList, progress_bar)
             end = time.time()
             completionTime = end - start  # Time elapsed in seconds
             st.caption(f"Completed parsing IBM docs in {completionTime} seconds")
