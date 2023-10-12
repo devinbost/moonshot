@@ -8,6 +8,15 @@ from langchain.docstore.document import Document
 import aiohttp
 from streamlit.delta_generator import DeltaGenerator
 from DataAccess import DataAccess
+import logging
+from datetime import datetime
+
+# Configure logging
+logging.basicConfig(
+    filename="crawler.log",
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s: %(message)s",
+)
 
 
 class Crawler:
@@ -49,6 +58,7 @@ class Crawler:
         return urls
 
     async def extract_page_content(self, url: str, session: ClientSession):
+        logging.info(f"Extracting content from URL: {url}")
         try:
             async with session.get(url) as response:
                 html_content = await response.text()
@@ -59,9 +69,11 @@ class Crawler:
             article.parse()
             content = article.text
             title = article.title
+            logging.info(f"Successfully extracted content from URL: {url}")
             return url, content, title
-        except:
+        except Exception as e:
             print(f"Timeout error for URL: {url}")
+            logging.error(f"Timeout or some other error extracting URL {url}: {e}")
             return url, "", ""
 
     async def async_chunk_page(
@@ -76,20 +88,27 @@ class Crawler:
     ):
         async with self.semaphore:  # this will wait if there are already too many tasks running:
             url, chunks, title = await self.async_chunk_page(url, session)
-            page_docs = [
-                Document(
-                    page_content=chunk,
-                    metadata={"url": url, "title": title},
+            if len(chunks) == 1 and len(chunks[0]) < 500:
+                print(f"Skipping page {url} with only 1 chunk under 500 characters.")
+                logging.info(
+                    f"Skipping page {url} with only 1 chunk under 500 characters."
                 )
-                for chunk in chunks
-            ]
-            # async transform_documents is not available yet
-            split_docs = self.data_access.splitter.transform_documents(page_docs)
-            vectorStore = self.data_access.getVectorStore()
-            # vectorStore.aadd_documents(split_docs) isn't yet implemented. We will work around it.
-            # await vectorStore.aadd_documents(split_docs)
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, vectorStore.add_documents, split_docs)
+            else:
+                page_docs = [
+                    Document(
+                        page_content=chunk,
+                        metadata={"url": url, "title": title},
+                    )
+                    for chunk in chunks
+                ]
+                # async transform_documents is not available yet
+                split_docs = self.data_access.splitter.transform_documents(page_docs)
+                vectorStore = self.data_access.getVectorStore()
+                # vectorStore.aadd_documents(split_docs) isn't yet implemented. We will work around it.
+                # await vectorStore.aadd_documents(split_docs)
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(None, vectorStore.add_documents, split_docs)
+                logging.info(f"Written to database, URL: {url}, Title: {title}")
 
         async with self.counter_lock:
             self.counter += 1
@@ -103,6 +122,9 @@ class Crawler:
         percentage_completion = ((counter + 1) / total_url_count) * 100
         print(f"Completed {counter} out of {total_url_count} in total")
         print(f"Processing... Completion: {percentage_completion:.2f}%")
+        now = datetime.now()
+        current_time = now.strftime("%H:%M:%S")
+        print("Current Time =", current_time)
         progress_bar.progress(
             int(percentage_completion),
             text=f"Processing... Completion: {percentage_completion:.2f}%",
@@ -111,7 +133,7 @@ class Crawler:
 
     async def process_urls(self, progress_bar: DeltaGenerator):
         timeout = aiohttp.ClientTimeout(
-            total=10
+            total=30
         )  # 10 seconds timeout for the entire request process
         async with aiohttp.ClientSession(
             timeout=timeout

@@ -1,5 +1,5 @@
 import os
-
+import streamlit as st
 from Chatbot import Chatbot
 from Crawler import Crawler
 from DataAccess import DataAccess
@@ -35,5 +35,11 @@ class Main:
 
 if __name__ == "__main__":
     print('running __name__ == "__main__"')
-    main = Main()
+    if "main" not in st.session_state:
+        print("'main' not in st.session_state")
+        main = Main()
+        st.session_state["main"] = main
+    else:
+        print("'main' in st.session_state")
+        main = st.session_state["main"]
     main.buildUI()

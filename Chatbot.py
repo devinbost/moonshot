@@ -41,7 +41,7 @@ class Chatbot:
             )
             self.langchain_model = WatsonxLLM(model=self.legacy_model)
         elif provider == "OPENAI":
-            self.langchain_model = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
+            self.langchain_model = ChatOpenAI(temperature=0, model_name="gpt-4")
 
         self.rag_chain = ConversationalRetrievalChain.from_llm(
             llm=self.langchain_model,
@@ -59,8 +59,13 @@ class Chatbot:
             print(f"""{row.page_content}\n""")
 
     def runInference(self, question: str) -> dict:
+        topK = self.similarity_search_top_k(question, 10)
         bot_response = self.rag_chain(
-            {"question": question, "chat_history": self.chat_history}
+            {
+                "question": "Answer as if you're an expert in the resources provided as context below. Also, if you're not sure, just answer based on what you know from the information below.-- "
+                + question,
+                "chat_history": self.chat_history,
+            }
         )
         self.chat_history.append((question, bot_response["answer"]))
         # Should I run vector search on the new query and then combine results with the prior?
