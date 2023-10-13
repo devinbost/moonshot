@@ -29,6 +29,7 @@ class Crawler:
         self.semaphore = asyncio.Semaphore(
             20
         )  # limit to 10 concurrent tasks, adjust as needed
+        self.sitemap_gen_semaphore = asyncio.Semaphore(20)
 
     def get_url_count(self):
         return len(self.urls)
@@ -163,7 +164,14 @@ class Crawler:
                 for sitemap in sitemap_url_list
                 for url in self.get_sitemap_urls(sitemap, onlyEnglish=True)
             ]
-            self.urls = all_urls
+            length_of_urls = len(all_urls)
+            unique_urls = list(set(all_urls))
+            logging.info(f"Length of all_urls is: {length_of_urls}")
+            print(f"Length of all_urls is: {length_of_urls}")
+            length_of_unique_urls = len(unique_urls)
+            print(f"Length of unique all_urls is: {length_of_unique_urls}")
+            logging.info(f"Length of unique all_urls is: {length_of_unique_urls}")
+            self.urls = unique_urls
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)

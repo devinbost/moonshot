@@ -3,6 +3,7 @@ import streamlit as st
 from Chatbot import Chatbot
 from Crawler import Crawler
 from DataAccess import DataAccess
+from SitemapCrawler import SitemapCrawler
 from UserInterface import UserInterface
 
 
@@ -13,6 +14,7 @@ class Main:
         self.dataAccess: DataAccess = DataAccess()
         self.crawler: Crawler = Crawler(self.dataAccess)
         self.chatbot: Chatbot = None
+        self.sitemap_crawler: SitemapCrawler = SitemapCrawler()
 
     def firstRun(self):
         if self.isFirstRun is True:
@@ -29,7 +31,9 @@ class Main:
     def buildUI(self):
         print("ran buildUI")
         self.startChatbot()
-        ui = UserInterface(self.dataAccess, self.chatbot, self.crawler)
+        ui = UserInterface(
+            self.dataAccess, self.chatbot, self.crawler, self.sitemap_crawler
+        )
         ui.render()
 
 

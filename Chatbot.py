@@ -59,7 +59,7 @@ class Chatbot:
             print(f"""{row.page_content}\n""")
 
     def runInference(self, question: str) -> dict:
-        topK = self.similarity_search_top_k(question, 10)
+        topK = self.similarity_search_top_k(question, 80)
         bot_response = self.rag_chain(
             {
                 "question": "Answer as if you're an expert in the resources provided as context below. Also, if you're not sure, just answer based on what you know from the information below.-- "

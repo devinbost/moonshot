@@ -5,14 +5,23 @@ from Crawler import Crawler
 from DataAccess import DataAccess
 import time
 
+from SitemapCrawler import SitemapCrawler
+
 
 class UserInterface:
-    def __init__(self, data_access: DataAccess, chatbot: Chatbot, crawler: Crawler):
+    def __init__(
+        self,
+        data_access: DataAccess,
+        chatbot: Chatbot,
+        crawler: Crawler,
+        sitemap_crawler: SitemapCrawler,
+    ):
         print("running __init__ on UserInterface")
         self.app_name = "Chatbot demo"
         self.data_access = data_access
         self.chatbot = chatbot
         self.crawler = crawler
+        self.sitemap_crawler = sitemap_crawler
 
     def render(self):
         print("Running render")
@@ -54,3 +63,7 @@ class UserInterface:
             self.data_access.vector_store.clear()
         if st.button("Load Wikipedia dataset"):
             self.data_access.loadWikipediaData()
+
+        url_for_sitemap = st.text_input("URL to build sitemap from")
+        if st.button("Build sitemap"):
+            self.sitemap_crawler.start_sitemap_building(url_for_sitemap)
