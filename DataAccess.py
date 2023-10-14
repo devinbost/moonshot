@@ -15,6 +15,7 @@ from langchain.docstore.document import Document
 
 import config
 
+
 class DataAccess:
     def __init__(self):
         self.vector_store = None
@@ -30,7 +31,10 @@ class DataAccess:
             length_function=len,
             is_separator_regex=False,
         )
-        cloud_config = {"secure_connect_bundle": config.scratch_path + "/secure-connect-openai.zip"}
+        cloud_config = {
+            "secure_connect_bundle": config.scratch_path + "/secure-connect-openai.zip"
+        }
+        print(cloud_config)
         with open(config.openai_json) as f:
             secrets = json.load(f)
 
