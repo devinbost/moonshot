@@ -1,4 +1,3 @@
-import os
 import streamlit as st
 from Chatbot import Chatbot
 from Crawler import Crawler
