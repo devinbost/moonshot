@@ -1,5 +1,4 @@
 # custom excludes
-.env
 data/
 scratch/
 
