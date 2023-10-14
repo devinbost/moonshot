@@ -11,6 +11,8 @@ from ibm_watson_machine_learning.foundation_models.extensions.langchain import (
 from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 
+import config
+
 
 class Chatbot:
     # Need to refactor this class at some point to support multiple LLM providers

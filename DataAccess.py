@@ -13,12 +13,14 @@ import wget
 import pandas as pd
 from langchain.docstore.document import Document
 
+import config
+
 
 class DataAccess:
     def __init__(self):
         self.vector_store = None
-        self.keyspace = os.getenv("KEYSPACE")
-        self.table_name = os.getenv("TABLE_NAME")
+        self.keyspace = os.getenv("KEYSPACE", "keyspace")
+        self.table_name = os.getenv("TABLE_NAME", "table")
         # self.embeddings = HuggingFaceEmbeddings(
         #     model_name="all-mpnet-base-v2"
         # )
@@ -68,9 +70,11 @@ class DataAccess:
 
     def loadWikipediaData(self):
         url = "https://raw.githubusercontent.com/GeorgeCrossIV/Langchain-Retrieval-Augmentation-with-CASSIO/main/20220301.simple.csv"
-        if not os.path.isfile("./20220301.simple.csv"):
+        sample_data = config.data_path + "/20220301.simple.csv"
+
+        if not os.path.isfile(sample_data):
             wget.download(url)
-        data = pd.read_csv("20220301.simple.csv")
+        data = pd.read_csv(sample_data)
         data = data.head(10)
         data = data.rename(columns={"text ": "text"})
         for index, row in data.iterrows():
