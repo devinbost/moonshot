@@ -1,4 +1,4 @@
-from langchain import PromptTemplate
+from langchain.prompts import PromptTemplate
 from langchain.chains import ConversationalRetrievalChain
 from langchain.docstore.document import Document
 
