@@ -4,3 +4,5 @@ Use of AstraDB with a web crawler to extract code and execute with LangChain and
 Start from UserInterface.py
 
 Most easily navigated in PyCharm
+
+Reach out to Devin for more info if interested.
