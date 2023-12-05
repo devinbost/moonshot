@@ -1,0 +1,12 @@
+aiohttp
+bs4
+cassio
+ibm-watson-machine-learning
+langchain
+newspaper3k
+pandas
+requests
+sentence-transformers
+streamlit
+typing
+wget

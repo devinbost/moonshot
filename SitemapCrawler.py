@@ -1,6 +1,7 @@
 import asyncio
 import logging
 
+import os
 import aiohttp
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
@@ -8,9 +9,11 @@ import requests
 from bs4 import BeautifulSoup
 from DataAccess import DataAccess
 
+import config
+
 # Configure logging
 logging.basicConfig(
-    filename="crawler.log",
+    filename=config.scratch_path + "/crawler.log",
     level=logging.INFO,
     format="%(asctime)s %(levelname)s: %(message)s",
 )
@@ -54,14 +57,16 @@ class SitemapCrawler:
 
     def start_sitemap_building(self, base_url):
         crawled_urls = set()
-        base_url = "https://example.com"  # Replace with your target website
+
+        base_url = os.getenv("CRAWLER_BASE_URL" "https://www.kubeflow.org")
+        url_file = scratch_path + "/urls.txt"
 
         # Run asynchronous crawl
         asyncio.run(self.crawl_website(base_url))
 
         # Write URLs to a text file
-        with open("urls.txt", "w") as file:
+        with open(url_file, "w") as file:
             for url in crawled_urls:
                 file.write(url + "\n")
 
-        print("URLs written to urls.txt successfully.")
+        print(f"URLs written to {url_file} successfully.")

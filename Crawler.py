@@ -11,9 +11,11 @@ from DataAccess import DataAccess
 import logging
 from datetime import datetime
 
+import config
+
 # Configure logging
 logging.basicConfig(
-    filename="crawler.log",
+    filename=config.scratch_path + "/crawler.log",
     level=logging.INFO,
     format="%(asctime)s %(levelname)s: %(message)s",
 )
