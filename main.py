@@ -4,8 +4,7 @@ from Chatbot import Chatbot
 from Crawler import Crawler
 from DataAccess import DataAccess
 from SitemapCrawler import SitemapCrawler
-from UIComponents import render
-from UserInterface import UserInterface
+from UserInterface import UserInterface, render
 
 
 class Main:
