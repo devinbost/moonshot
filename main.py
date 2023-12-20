@@ -1,8 +1,10 @@
+import os
 import streamlit as st
 from Chatbot import Chatbot
 from Crawler import Crawler
 from DataAccess import DataAccess
 from SitemapCrawler import SitemapCrawler
+from UIComponents import render
 from UserInterface import UserInterface
 
 
@@ -33,11 +35,12 @@ class Main:
         ui = UserInterface(
             self.dataAccess, self.chatbot, self.crawler, self.sitemap_crawler
         )
-        ui.render()
+        render(ui.data_access, ui.app_name, ui.chatbot, ui.crawler)
 
 
 if __name__ == "__main__":
     print('running __name__ == "__main__"')
+    st.set_page_config(layout="wide")
     if "main" not in st.session_state:
         print("'main' not in st.session_state")
         main = Main()

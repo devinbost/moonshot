@@ -24,6 +24,8 @@ class DataAccess:
         # self.embeddings = HuggingFaceEmbeddings(
         #     model_name="all-mpnet-base-v2"
         # )
+        self.output_variables = ["new", "myllm", "emb"]
+        self.dag = {}
         self.embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
         self.splitter = RecursiveCharacterTextSplitter(
             chunk_size=4000,
@@ -90,3 +92,9 @@ class DataAccess:
         wikiDocument = Document(page_content=page_content, metadata=metadata)
         wikiDocs = self.splitter.transform_documents([wikiDocument])
         self.vector_store.add_documents(wikiDocs)
+
+    def get_output_variable_names(self):
+        return self.output_variables
+
+    def add_output_variable(self, variable):
+        self.output_variables.append(variable)
