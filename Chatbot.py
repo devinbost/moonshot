@@ -1,6 +1,9 @@
+import logging
+
 from langchain.prompts import PromptTemplate
 from langchain.chains import ConversationalRetrievalChain
 from langchain.docstore.document import Document
+from langchain_core.prompts import ChatPromptTemplate
 
 from DataAccess import DataAccess
 import os
@@ -10,8 +13,12 @@ from ibm_watson_machine_learning.foundation_models.extensions.langchain import (
 )
 from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
-
-import config
+from langchain.vectorstores import AstraDB
+from langchain.chat_models import ChatOpenAI
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.vectorstores import AstraDB
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
 
 
 class Chatbot:
@@ -60,8 +67,38 @@ class Chatbot:
         for row in results:
             print(f"""{row.page_content}\n""")
 
+    def run_inference_astrapy(
+        self,
+        terms_for_ann: str,
+        ann_length: int,
+        collection: str,
+        question: str,
+    ) -> object:
+        vector_store = self.data_access.setupVectorStoreNew(collection=collection)
+        results = vector_store.similarity_search(terms_for_ann, k=ann_length)
+        for doc in results:
+            doc.page_content = doc.page_content.replace("{", "{{").replace("}", "}}")
+        concatenated_content = "\nEXAMPLE: \n".join(
+            [doc.page_content for doc in results]
+        )
+
+        template = f"""{{question}}
+        
+        EXAMPLES: 
+        {concatenated_content}
+        """
+        # Create a prompt from the template
+        prompt = ChatPromptTemplate.from_template(template)
+
+        # Initialize the ChatOpenAI model
+        model = ChatOpenAI()
+        chain = prompt | model | StrOutputParser()
+        response = chain.invoke({"question": question})  # Replace with your question
+        logging.info(response)
+        return response
+
     def runInference(self, question: str) -> dict:
-        topK = self.similarity_search_top_k(question, 80)
+        topK = self.similarity_search_top_k(question, 10)
         bot_response = self.rag_chain(
             {
                 "question": "Answer as if you're an expert in the resources provided as context below. Also, if you're not sure, just answer based on what you know from the information below.-- "

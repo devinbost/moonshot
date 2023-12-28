@@ -10,9 +10,7 @@ class ComponentData(BaseModel):
     access_type: str
     component_name: str
     access_type: str  # e.g. "method", "constructor", "property"
-    component_type: Optional[
-        str
-    ]  # Needs to be changed to required after we get things working.
+    component_type: str  # e.g. "setup", "inference"
     params: dict[
         str, str
     ] = {}  # key/value pairs of named parameters (names and their values)
