@@ -216,10 +216,12 @@ class DataAccess:
 
     def exec_cql_query_simple(self, query: str) -> List[dict]:
         """Remember, we need to sanitize this!"""
+        print(query)
         session: Session = self.getCqlSession()
         query_stmt = SimpleStatement(query)
         session.row_factory = dict_factory
         rows: List[dict] = session.execute(query_stmt).all()
+        print(rows)
         return rows
 
     def get_cql_table_description(self, table_schema: TableSchema) -> str:
@@ -229,6 +231,27 @@ class DataAccess:
         return output
 
     def get_cql_table_columns(self, table_schema: TableSchema) -> List[ColumnSchema]:
+        query = f"SELECT * FROM system_schema.columns WHERE keyspace_name = '{table_schema.keyspace_name}' AND table_name = '{table_schema.table_name}';"
+        output = self.exec_cql_query_simple(query)
+        table_columns = [
+            ColumnSchema(
+                **{
+                    key: item[key]
+                    for key in [
+                        "column_name",
+                        "clustering_order",
+                        "kind",
+                        "position",
+                        "type",
+                    ]
+                }
+            )
+            for item in output
+            # if item["kind"] == "regular"
+        ]
+        return table_columns
+
+    def get_cql_table_keys(self, table_schema: TableSchema) -> List[ColumnSchema]:
         query = f"SELECT * FROM system_schema.columns WHERE keyspace_name = '{table_schema.keyspace_name}' AND table_name = '{table_schema.table_name}';"
         output = self.exec_cql_query_simple(query)
         table_columns = [
@@ -274,6 +297,39 @@ class DataAccess:
                     table_name=table_name, keyspace_name=keyspace, columns=columns
                 )
             )
+        return table_schemas
+
+    def get_table_schemas_in_db_v2(self, empty: str) -> List[TableSchema]:
+        print(empty)
+        session: Session = self.getCqlSession()
+        table_entries = session.execute(
+            "SELECT keyspace_name, table_name FROM system_schema.tables;"
+        )
+        table_schemas: List[TableSchema] = []
+        for row in table_entries:
+            table_name: str = row.table_name
+            keyspace_name: str = row.keyspace_name
+            if "system" not in keyspace_name:
+                table_schema = session.execute(
+                    f"SELECT * FROM system_schema.columns WHERE keyspace_name = '{keyspace_name}' AND table_name = '{table_name}'"
+                )
+                columns = [
+                    ColumnSchema(
+                        column_name=col.column_name,
+                        type=col.type,
+                        clustering_order=col.clustering_order,
+                        kind=col.kind,
+                        position=col.position,
+                    )
+                    for col in table_schema
+                ]
+                table_schemas.append(
+                    TableSchema(
+                        table_name=table_name,
+                        keyspace_name=keyspace_name,
+                        columns=columns,
+                    )
+                )
         return table_schemas
 
     def get_table_schemas(self, keyspace: str) -> List[TableSchema]:
@@ -614,7 +670,8 @@ RESULTS:"""
         table_schema.columns = columns
         return table_schema
 
-    def get_path_segment_keywords(self):
+    def get_path_segment_keywords(self, empty):
+        print(empty)
         query = SimpleStatement(
             f"""SELECT query_text_values['metadata.subdomain'] as subdomain,
          query_text_values['metadata.path_segment_1'] as seg1,

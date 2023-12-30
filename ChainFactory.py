@@ -20,6 +20,12 @@ class ChainFactory:
     def build_summarization_chain(
         model: ChatOpenAI, data_access: DataAccess, table_schema: TableSchema
     ):
+        def test_func(testme):
+            print(testme)
+            print(table_schema)
+            user_props = testme["user_info_not_summary"]
+            return user_props
+
         top3_chain = (
             PromptFactory.build_select_query_for_top_three_rows_parallelizable(
                 table_schema
@@ -32,7 +38,7 @@ class ChainFactory:
         select_with_where_chain = (
             {
                 "Top3Rows": top3_chain,
-                "PropertyInfo": itemgetter("property_info"),
+                "PropertyInfo": test_func,  # Should be user properties of some kind
             }
             | PromptFactory.build_select_query_with_where_parallelizable(table_schema)
             | model
@@ -91,45 +97,23 @@ class ChainFactory:
         )
         return table_summarization_chain
 
-    def build_summarization_chains_from_list(self, table_schemas: List[TableSchema]):
-        chains = [
-            ChainFactory.build_summarization_chain(model, fake_data_access, table)
-            for table in table_schemas
-        ]
+    # def build_summarization_chains_from_list(self, table_schemas: List[TableSchema]):
+    #     chains = [
+    #         ChainFactory.build_summarization_chain(model, fake_data_access, table)
+    #         for table in table_schemas
+    #     ]
 
     def build_user_summarization_chain_parallelizable(
         self, data_access: DataAccess, model: ChatOpenAI, user_info: UserInfo
     ):
-        relevant_user_table_chain = (
-            {
-                "TableList": RunnableLambda(data_access.get_table_schemas_in_db),
-                "UserInfo": itemgetter("user_info_not_summary"),
-            }
-            | PromptFactory.build_table_identification_prompt()
-            | model
-            | StrOutputParser()
-            | RunnableLambda(PromptFactory.clean_string_v2)
-            | RunnableLambda(
-                data_access.map_tables_and_populate
-            )  # Not the most performant to rebuild column metadata here, but we can optimize later
-        )
-        relevant_tables = relevant_user_table_chain.invoke(
-            {"user_info_not_summary": user_info}
-        )
-        factory = ChainFactory()
-        # Pass the dictionary as keyword arguments
-        user_summarization_chain_parallelizable = factory.build_summarization_chain_set(
-            model, data_access, relevant_tables
-        )
-        return user_summarization_chain_parallelizable
+        def testme2(testme):
+            print(testme)
+            return testme["user_info_not_summary"]
 
-    def build_user_summarization_chain_parallelizable(
-        self, data_access: DataAccess, model: ChatOpenAI, user_info: UserInfo
-    ):
         relevant_user_table_chain = (
             {
-                "TableList": RunnableLambda(data_access.get_table_schemas_in_db),
-                "UserInfo": itemgetter("user_info_not_summary"),
+                "TableList": RunnableLambda(data_access.get_table_schemas_in_db_v2),
+                "UserInfo": RunnableLambda(testme2),
             }
             | PromptFactory.build_table_identification_prompt()
             | model
@@ -164,6 +148,29 @@ class ChainFactory:
                     data_access.get_path_segment_keywords
                 ),
                 "UserInformationSummary": user_info_summary_parallelizable_chain,
+            }
+            | PromptFactory.build_collection_vector_find_prompt()
+            | model
+            | StrOutputParser()
+            | RunnableLambda(PromptFactory.clean_string_v2)
+        )
+        return path_segment_keyword_chain
+
+    def build_path_segment_keyword_chain_non_parallel(
+        self,
+        model: ChatOpenAI,
+        user_info_summary,
+        data_access: DataAccess,
+    ):
+        """
+        Returns list of filters like this: [{{"metadata.path_segment_X": "VALUE"}}]
+        """
+        path_segment_keyword_chain = (
+            {
+                "PathSegmentValues": RunnableLambda(
+                    data_access.get_path_segment_keywords
+                ),
+                "UserInformationSummary": user_info_summary,
             }
             | PromptFactory.build_collection_vector_find_prompt()
             | model
@@ -269,3 +276,39 @@ class ChainFactory:
             | StrOutputParser()
         )
         return path_segment_keyword_chain
+
+    def build_final_recommendation_chain(
+        self,
+        user_summarization_chain_parallelizable: RunnableParallel,
+        collection_summarization_chain_parallelizable: RunnableParallel,
+        model: ChatOpenAI,
+    ):
+        final_chain = (
+            {
+                "UserSummary": user_summarization_chain_parallelizable,
+                "BusinessSummary": collection_summarization_chain_parallelizable,
+                "UserMessages": itemgetter("user_messages")
+                | RunnableLambda(lambda x: x.reverse()),
+            }
+            | PromptFactory.build_final_response_prompt()
+            | model
+            | StrOutputParser()
+        )
+        return final_chain
+
+    def build_final_recommendation_chain_non_parallel(
+        self,
+        model: ChatOpenAI,
+    ):
+        final_chain = (
+            {
+                "UserSummary": itemgetter("user_summary"),
+                "BusinessSummary": itemgetter("business_summary"),
+                "UserMessages": itemgetter("user_messages")
+                | RunnableLambda(lambda x: x.reverse()),
+            }
+            | PromptFactory.build_final_response_prompt()
+            | model
+            | StrOutputParser()
+        )
+        return final_chain

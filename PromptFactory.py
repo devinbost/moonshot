@@ -26,7 +26,8 @@ def get_cql_code_gen_prefix():
 
 
 def get_personal_response_prefix():
-    return f"""You're a helpful assistant. You're talking to a customer, so be respectful and show empathy. \n"""
+    return f"""You're a helpful assistant. You're talking to a customer, so be respectful and show empathy.
+    \n"""
 
 
 def get_helpful_assistant_prefix():
@@ -81,6 +82,36 @@ def build_table_identification_prompt():
     return PromptTemplate.from_template(prompt)
 
 
+def build_final_response_prompt() -> PromptTemplate:
+    prompt = (
+        get_personal_response_prefix()
+        + """"You will be given a rich set of summaries of basically everything we know about this customer, 
+        and then you will be given a second set of summaries with a lot of information that is likely relevant to 
+        their needs based on a previously run search algorithm that we ran internally on their information. Your job 
+        is to use this information to make the best possible recommendation to the customer. The recommendation 
+        should be grounded in what we know about them and our business, based on the information we obtained. 
+        Recommend what is best for the customer, but if it's good for the business also, that's a double win.
+        You will also be provided (at the end) with the customer's most recent messages, ordered from oldest to most recent.
+        Be sure that your recommendation to them is relevant to their messages, especially their most recent message.
+        
+        
+        USER SUMMARIES:
+        {UserSummary}
+        
+        
+        
+        BUSINESS SUMMARIES:
+        {BusinessSummary}
+        
+        
+        
+        USER MESSAGES:
+        {UserMessages}
+        """
+    )
+    return PromptTemplate.from_template(prompt)
+
+
 def build_summarization_prompt() -> PromptTemplate:
     prompt = (
         "You're a helpful assistant. I'm will give you some information, and I want you to summarize what I'm "
@@ -118,8 +149,8 @@ def build_collection_vector_find_prompt() -> PromptTemplate:
         'residential' as a path segment value for any path other than path_segment_2. 
         
         I want you to construct at least 10 (but less than 20) such JSON objects, and they should cover different subjects associated with the provided USER INFORMATION SUMMARY below.
-        Try to get good subject coverage. For example, you might select one filter from each of the following categories: plans, phones, support, promos / promotions.
-        If you can find matching keywords from the more specific path_segments, please do so.
+        Select matches that are as specific as possible. Prefer finding matches to columns in this order of preference (from best to worst):
+        path_segment_6, path_segment_5, path_segment_4, path_segment_3, path_segment_2, path_segment_1
         
         Return ONLY this list of JSON objects."""
         + """
@@ -225,6 +256,8 @@ def build_select_query_with_where_parallelizable(
         on the table.
 
     {table_schema}
+    
+    PROPERTY INFO:
 
     {{PropertyInfo}}
 
