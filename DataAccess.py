@@ -611,6 +611,21 @@ RESULTS:"""
         }
         return distinct_values_dict
 
+    def filtered_ANN_search(
+        self, collection_filter: dict[str, str], user_summary: dict[str, str]
+    ):
+        user_summary_string = json.dumps(user_summary)
+        input_vector = self.embedding_direct.encode(user_summary_string).tolist()
+        collection = AstraDBCollection(
+            collection_name="sitemapls", astra_db=self.astrapy_db
+        )
+        results = collection.vector_find(
+            vector=input_vector,
+            filter=collection_filter,
+            limit=100,
+        )
+        return results
+
 
 def get_distinct_path_segments(session, segment_key):
     # Adjust the query to use the specified segment key

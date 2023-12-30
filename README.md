@@ -26,6 +26,11 @@ Alpha-stage library that could almost replace your customer support department.
 - [ ] Graph-based prompt construction
 - [ ] Automatic data ingestion from S3, GCP Cloud Storage, and Azure Blob Storage
 
+## Feedback welcome!
+We'd love to get feedback on what we can do to improve this library. 
+Feedback should be created as Issues on this github repo.
+
+Don't forget to **star this repo**!
 ### Usage:
 Start from UserInterface.py
 
