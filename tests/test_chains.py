@@ -553,31 +553,100 @@ class TestChains(unittest.TestCase):
             ]
         )
 
-        relevant_user_table_chain = (
-            {
-                "TableList": RunnableLambda(fake_data_access.get_table_schemas_in_db),
-                "UserInfo": itemgetter("user_info_not_summary"),
-            }
-            | PromptFactory.build_table_identification_prompt()
-            | model
-            | StrOutputParser()
-            | RunnableLambda(PromptFactory.clean_string_v2)
-            | RunnableLambda(
-                fake_data_access.map_tables_and_populate
-            )  # Not the most performant to rebuild column metadata here, but we can optimize later
+        factory = ChainFactory()
+        # Pass the dictionary as keyword arguments
+        user_summarization_chain_parallelizable = (
+            factory.build_user_summarization_chain_parallelizable(
+                fake_data_access, model, user_info
+            )
         )
+        user_info_summary_results = user_summarization_chain_parallelizable.invoke(
+            {"user_info_not_summary": user_info}
+        )
+        # Then, we need to build the chains for
+
+        path_segment_keyword_chain = factory.build_path_segment_keyword_chain(model, user_summarization_chain_parallelizable,fake_data_access)
+
+        filters = path_segment_keyword_chain.invoke({}) # [{{"metadata.path_segment_X": "VALUE"}}]
+
+        paired_filters_and_user_summaries = [{"filter": f, "user_info": user_info_summary_results} for f in filters]
+
+        def run_query(filter_and_summary_pair):
+            collection_filter_inner = filter_and_summary_pair["filter"]
+            user_summary_inner = filter_and_summary_pair["user_info"]
+            search_results_inner = fake_data_access.filtered_ANN_search(
+                collection_filter_inner, user_summary_inner
+            )
+            return search_results_inner
+        # I need to build the Parallelizable that uses a Lambda on each of those pairs to run vector search
+        collection_summarization_prep_chain = ChainFactory.build_astrapy_collection_summarization_prep_chain(model, )
+
         chains = [
-            ChainFactory.build_summarization_chain(model, fake_data_access, table)
-            for table in tables
+            ChainFactory.build_astrapy_collection_summarization_chain_v2(model, user_info_summary_results, fake_data_access)
+            for collection_filter in filters
         ]
         chain_kwargs = {f"chain{i+1}": chain for i, chain in enumerate(chains)}
         # Pass the dictionary as keyword arguments
         summarization_chains = RunnableParallel(**chain_kwargs)
-        summary = summarization_chains.invoke(
+
+        for collection_filter in filters:
+            # Need to make parallel when we have more time:
+            search_results = fake_data_access.filtered_ANN_search(collection_filter, user_info_summary_results)
+            chain = (
+                 {"Information": itemgetter("search_results")}
+                | PromptFactory.build_summarization_prompt()
+                | model
+                 | StrOutputParser
+                 )
+
+        filter_summarization_chains = [
+            ChainFactory.build_astrapy_collection_summarization_chain(model, fake_data_access, table)
+            for collection_filter in filters
+        ]
+
+        filters_and_summaries = path_segment_keyword_chain.invoke({})
+        # Returns: [{"filter": {"metadata.path_segment_X": "VALUE"}, "user_summary": summary_contents  },
+        #           {"filter": {"metadata.path_segment_Y": "VALUE"}, "user_summary": summary_contents  }]
+
+        for filter_and_summary in filters_and_summaries:
+            collection_filter = filter_and_summary["filter"]
+            user_summary =
+
+
+        func = DataAccess.filtered_ANN_search_maker(user_info_summary_results)
+        # Do the dict kwargs thing again to create Parallelizable to run the filters
+
+        search_results = [
+            fake_data_access.filtered_ANN_search(search_filter, user_info_summary)
+            for search_filter in selected_search_filters
+        ]
+
+
+        filter_chains = [
+            filter for filters in path_segment_keyword_chain
+        ]
+            (
+            {
+                "PathSegmentValues": itemgetter("path_segment_keywords"),
+                "UserInformationSummary": user_summarization_chain_parallelizable,
+            }
+            | PromptFactory.build_collection_vector_find_prompt()
+            | model
+            | StrOutputParser()
+            | RunnableLambda(PromptFactory.clean_string_v2)
+        )
+        chosen_search_filters = path_segment_keyword_chain.invoke(
+            {
+                "path_segment_keywords": path_segment_keywords,
+                "user_info_summary": user_info_summary,
+            }
+        )
+        summary = user_summarization_chain_parallelizable.invoke(
             {
                 "property_info": user_info,
             }
         )
+
         table_summarization_chain = ()
 
         # table_schema.cql_description =

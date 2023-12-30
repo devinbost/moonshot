@@ -4,7 +4,7 @@ from cassandra.cluster import (
     ResultSet,
 )
 from cassandra.query import dict_factory
-from typing import List, Dict, Tuple, Any
+from typing import List, Dict, Tuple, Any, Callable
 from cassandra.auth import PlainTextAuthProvider
 import hashlib
 import os
@@ -653,7 +653,7 @@ RESULTS:"""
 
     def filtered_ANN_search(
         self, collection_filter: dict[str, str], user_summary: dict[str, str]
-    ):
+    ) -> list[dict[str, Any]]:
         user_summary_string = json.dumps(user_summary)
         input_vector = self.embedding_direct.encode(user_summary_string).tolist()
         collection = AstraDBCollection(
@@ -665,6 +665,24 @@ RESULTS:"""
             limit=100,
         )
         return results
+
+    def filtered_ANN_search_maker(
+        self, user_summary: dict[str, str]
+    ) -> Callable[[dict[str, str]], list[dict[str, Any]]]:
+        def filtered_search_func(collection_filter: dict[str, str]):
+            user_summary_string = json.dumps(user_summary)
+            input_vector = self.embedding_direct.encode(user_summary_string).tolist()
+            collection = AstraDBCollection(
+                collection_name="sitemapls", astra_db=self.astrapy_db
+            )
+            results = collection.vector_find(
+                vector=input_vector,
+                filter=collection_filter,
+                limit=100,
+            )
+            return results
+
+        return filtered_search_func
 
 
 def get_distinct_path_segments(session, segment_key):

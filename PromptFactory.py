@@ -34,6 +34,26 @@ def get_helpful_assistant_prefix():
     fact, don't say anything other than what I specify. \n"""
 
 
+def build_filter_and_summary_joiner_prompt():
+    prompt = (
+        get_helpful_assistant_prefix()
+        + """You will be given a list of filters in this format: [{{"metadata.path_segment_X": "VALUE"}}]
+    You will also be given a summary of user information. You need to combine this information into one dictionary object like this:
+    [{{"filter": {{"metadata.path_segment_X": "VALUE"}}, "user_summary": summary_contents  }},
+     {{"filter": {{"metadata.path_segment_Y": "VALUE"}}, "user_summary": summary_contents  }}]
+    so that the summary_contents data is joined to each of the unique metadata.path_segment objects.
+    Return only the resulting JSON list.
+    
+    FILTERS:
+    {PathSegmentValues}
+    
+    USER SUMMARY:
+    {UserInformationSummary}
+    """
+    )
+    return PromptTemplate.from_template(prompt)
+
+
 def build_table_identification_prompt():
     prompt = (
         get_helpful_assistant_prefix()
