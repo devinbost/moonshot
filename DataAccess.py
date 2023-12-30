@@ -389,7 +389,7 @@ class DataAccess:
             collection = AstraDBCollection(
                 collection_name="prompts", astra_db=self.astrapy_db
             )
-
+        # Workaround due to strange uuid bug:
         prompt_hash = hashlib.md5(prompt.encode()).hexdigest()
         vector = self.embedding_direct.encode(prompt).tolist()
         collection.insert_one({"_id": prompt_hash, "prompt": prompt, "$vector": vector})
@@ -573,6 +573,43 @@ RESULTS:"""
         columns = self.get_cql_table_columns(table_schema)
         table_schema.indexes = indexes
         table_schema.columns = columns
+
+    def get_path_segment_keywords(self):
+        query = SimpleStatement(
+            f"""SELECT query_text_values['metadata.subdomain'] as subdomain,
+         query_text_values['metadata.path_segment_1'] as seg1,
+         query_text_values['metadata.path_segment_2'] as seg2,
+         query_text_values['metadata.path_segment_3'] as seg3,
+         query_text_values['metadata.path_segment_4'] as seg4,
+         query_text_values['metadata.path_segment_5'] as seg5,
+         query_text_values['metadata.path_segment_6'] as seg6,
+         query_text_values['metadata.title'] as title,
+         query_text_values['metadata.nlp_keywords'] as keywords
+         FROM default_keyspace.sitemapls;"""
+        )
+        session = self.getCqlSession()
+        # execute the query
+        session.default_timeout = 120
+        results = session.execute(query)
+
+        # Convert results to a DataFrame
+        df = pd.DataFrame(results)
+        distinct_seg1 = df["seg1"].unique()
+        filtered_df = df[~df["seg2"].str.contains("knowledge-base", na=False)]
+        distinct_seg2 = filtered_df["seg2"].unique()
+        distinct_seg3 = df["seg3"].unique()
+        distinct_seg4 = df["seg4"].unique()
+        distinct_seg5 = df["seg5"].unique()
+        distinct_seg6 = df["seg6"].unique()
+        distinct_values_dict = {
+            "seg1": distinct_seg1,
+            "seg2": distinct_seg2,
+            "seg3": distinct_seg3,
+            "seg4": distinct_seg4,
+            "seg5": distinct_seg5,
+            "seg6": distinct_seg6,
+        }
+        return distinct_values_dict
 
 
 def get_distinct_path_segments(session, segment_key):

@@ -79,6 +79,42 @@ def build_summarization_prompt() -> PromptTemplate:
     return PromptTemplate.from_template(prompt)
 
 
+def build_collection_vector_find_prompt() -> PromptTemplate:
+    prompt = (
+        get_helpful_assistant_prefix()
+        + """ Based on the provided summary
+        
+        Generate a JSON object containing one or more of the following keys: metadata.path_segment_1, 
+        metadata.path_segment_2, metadata.path_segment_3, metadata.path_segment_4, metadata.path_segment_5, 
+        metadata.path_segment_6 Based on the following VECTOR DATA, I want you to determine which values of those 
+        metadata path segment keys are most likely to be associated with the USER INFORMATION below. Each path 
+        segment is more specific than the one prior to it. Use the most granular path_segment that makes sense. Avoid 
+        using more than one filter but always use at least one. Once you select a filter, I want you to return the 
+        information in a list of JSON objects with the following example syntax: [{{"metadata.path_segment_X": "VALUE"}}] where X 
+        is the selected path segment value, and VALUE is the value you've chosen based on the PATH SEGMENT VALUES 
+        available below. Only select values from the PATH SEGMENT VALUES below. Don't create any other path segment 
+        values. Also, ensure that the path segment value you selected corresponds to the correct path_segment number. 
+        For example, if the data below shows that 'residential' is associated with path_segment_2, don't use 
+        'residential' as a path segment value for any path other than path_segment_2. 
+        
+        I want you to construct at least 10 (but less than 20) such JSON objects, and they should cover different subjects associated with the provided USER INFORMATION SUMMARY below.
+        Try to get good subject coverage. For example, you might select one filter from each of the following categories: plans, phones, support, promos / promotions.
+        If you can find matching keywords from the more specific path_segments, please do so.
+        
+        Return ONLY this list of JSON objects."""
+        + """
+        PATH SEGMENT VALUES:
+        
+        {PathSegmentValues}
+        
+        USER INFORMATION SUMMARY:
+        
+        {UserInformationSummary}
+        """
+    )
+    return PromptTemplate.from_template(prompt)
+
+
 def build_select_query_for_top_three_rows() -> PromptTemplate:
     prefix = get_cql_code_gen_prefix()
     prompt = (
