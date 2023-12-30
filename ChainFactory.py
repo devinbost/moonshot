@@ -156,7 +156,7 @@ class ChainFactory:
         )
         return path_segment_keyword_chain
 
-    def build_path_segment_keyword_chain_non_parallel(
+    def build_collection_predicate_chain_non_parallel(
         self,
         model: ChatOpenAI,
         user_info_summary,
@@ -170,7 +170,7 @@ class ChainFactory:
                 "PathSegmentValues": RunnableLambda(
                     data_access.get_path_segment_keywords
                 ),
-                "UserInformationSummary": user_info_summary,
+                "UserInformationSummary": RunnableLambda(lambda x: user_info_summary),
             }
             | PromptFactory.build_collection_vector_find_prompt()
             | model
@@ -178,6 +178,33 @@ class ChainFactory:
             | RunnableLambda(PromptFactory.clean_string_v2)
         )
         return path_segment_keyword_chain
+
+    def build_collection_predicate_chain_non_parallel_v2(
+        self, model: ChatOpenAI, table_summarization, all_keywords: dict
+    ):
+        """
+        Returns list of filters like this: [{{"metadata.path_segment_X": "VALUE"}}]
+        """
+        path_segment_keyword_chain = (
+            {
+                "PathSegmentValues": RunnableLambda(lambda x: all_keywords),
+                "UserInformationSummary": RunnableLambda(lambda x: table_summarization),
+            }
+            | PromptFactory.build_collection_vector_find_prompt_v2()
+            | model
+            | StrOutputParser()
+            | RunnableLambda(PromptFactory.clean_string_v2)
+        )
+        return path_segment_keyword_chain
+
+    def build_vector_search_summarization_chain(self, model, search_results):
+        collection_summary_chain = (
+            {"Information": RunnableLambda(lambda x: search_results)}
+            | PromptFactory.build_summarization_prompt()
+            | model
+            | StrOutputParser()
+        )
+        return collection_summary_chain
 
     def build_astrapy_collection_summarization_chain(
         self,

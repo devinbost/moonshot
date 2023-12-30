@@ -166,6 +166,41 @@ def build_collection_vector_find_prompt() -> PromptTemplate:
     return PromptTemplate.from_template(prompt)
 
 
+def build_collection_vector_find_prompt_v2() -> PromptTemplate:
+    prompt = (
+        get_helpful_assistant_prefix()
+        + """ Based on the provided summary
+
+        Generate a JSON object containing one or more of the following keys: seg_1, 
+        seg_2, seg_3, seg_4, seg_5, 
+        seg_6 Based on the following VECTOR DATA, I want you to determine which values of those 
+        metadata path segment keys are most likely to be associated with the USER INFORMATION below. Each path 
+        segment is more specific than the one prior to it. Use the most granular seg that makes sense. Avoid 
+        using more than one filter but always use at least one. Once you select a filter, I want you to return the 
+        information in a list of JSON objects with the following example syntax: [{{"seg_X": "VALUE"}}] where X 
+        is the selected path segment value, and VALUE is the value you've chosen based on the PATH SEGMENT VALUES 
+        available below. Only select values from the PATH SEGMENT VALUES below. Don't create any other path segment 
+        values. Also, ensure that the path segment value you selected corresponds to the correct seg number. 
+        For example, if the data below shows that 'residential' is associated with seg_2, don't use 
+        'residential' as a path segment value for any path other than seg_2. 
+
+        I want you to construct at least 10 (but less than 20) such JSON objects, and they should cover different subjects associated with the provided USER INFORMATION SUMMARY below.
+        Select matches that are as specific as possible. Prefer finding matches to columns in this order of preference (from best to worst):
+        seg_6, seg_5, seg_4, seg_3, seg_2, seg_1
+
+        Return ONLY this list of JSON objects."""
+        + """
+        PATH SEGMENT VALUES:
+
+        {PathSegmentValues}
+
+        USER INFORMATION SUMMARY:
+
+        {UserInformationSummary}
+        """
+    )
+
+
 def get_relevant_user_tables(tables: list[TableSchema], user_info: UserInfo):
     prefix = get_python_code_gen_prefix()
     prompt = f"""{prefix} \n I will give you a list of table schemas and some user info, and I want you to return the names of tables that have any column name that matches any of the user info property names."""

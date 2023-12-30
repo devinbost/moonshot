@@ -670,8 +670,7 @@ RESULTS:"""
         table_schema.columns = columns
         return table_schema
 
-    def get_path_segment_keywords(self, empty):
-        print(empty)
+    def get_path_segment_keywords(self):
         query = SimpleStatement(
             f"""SELECT query_text_values['metadata.subdomain'] as subdomain,
          query_text_values['metadata.path_segment_1'] as seg1,
@@ -709,7 +708,7 @@ RESULTS:"""
         return distinct_values_dict
 
     def filtered_ANN_search(
-        self, collection_filter: dict[str, str], user_summary: dict[str, str]
+        self, collection_filter: dict[str, str], user_summary
     ) -> list[dict[str, Any]]:
         user_summary_string = json.dumps(user_summary)
         input_vector = self.embedding_direct.encode(user_summary_string).tolist()

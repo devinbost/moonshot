@@ -1,6 +1,6 @@
 import json
 from operator import itemgetter
-from typing import List
+from typing import List, Dict
 
 from langchain.chat_models import ChatOpenAI
 from langchain.embeddings import OpenAIEmbeddings
@@ -11,6 +11,7 @@ from langchain_core.runnables import (
     RunnablePassthrough,
     RunnableLambda,
     RunnableParallel,
+    Runnable,
 )
 
 import unittest
@@ -637,7 +638,7 @@ class TestChains(unittest.TestCase):
                 ),
             ]
         )
-        relevant_user_table_chain = (
+        relevant_table_chain = (
             {
                 "TableList": RunnableLambda(
                     fake_data_access.get_table_schemas_in_db_v2
@@ -652,7 +653,7 @@ class TestChains(unittest.TestCase):
                 fake_data_access.map_tables_and_populate
             )  # Not the most performant to rebuild column metadata here, but we can optimize later
         )
-        relevant_tables = relevant_user_table_chain.invoke(
+        relevant_tables = relevant_table_chain.invoke(
             {"user_info_not_summary": user_info}
         )
         factory = ChainFactory()
@@ -663,15 +664,100 @@ class TestChains(unittest.TestCase):
         ]
 
         for chain in table_summarization_chains:
-            result = chain.invoke(
-                {
-                    "user_info_not_summary": user_info,
-                }
-            )
+            result = chain.invoke({"user_info_not_summary": user_info})
             table_summarization_chain_results.append(result)
 
-        #######
-        relevant_user_table_chain = (
+        def run_query2(collection_filter_inner, user_summary_inner):
+            def myfunc(empty):
+                print(empty)
+                search_results_inner = fake_data_access.filtered_ANN_search(
+                    collection_filter_inner, user_summary_inner
+                )
+                return search_results_inner
+
+            return myfunc
+
+        collection_summary_chain_result_list = []
+
+        collection_predicate_chain = (
+            factory.build_collection_predicate_chain_non_parallel(
+                model, table_summarization_chain_results, fake_data_access
+            )
+        )
+        collection_predicates = collection_predicate_chain.invoke({})
+        # ^^ [{{"metadata.path_segment_X": "VALUE"}}]
+        for predicate in collection_predicates:
+            vector_search_results = fake_data_access.filtered_ANN_search(
+                predicate, "".join(table_summarization_chain_results)
+            )
+            collection_summary_chain = (
+                {
+                    "Information": RunnableLambda(
+                        run_query2(predicate, table_summarization_chain_results)
+                    ),
+                    "filter": RunnableLambda(lambda x: predicate),
+                    "user_info": RunnableLambda(
+                        lambda x: table_summarization_chain_results
+                    ),
+                }
+                | PromptFactory.build_summarization_prompt()
+                | model
+                | StrOutputParser()
+            )
+            collection_summary_chain_result = collection_summary_chain.invoke({})
+            collection_summary_chain_result_list.append(collection_summary_chain_result)
+            # Are we supposed to compute this summary for every user table? Maybe that's an okay approach.
+        ## Final recommendation chain:
+        final_chain = factory.build_final_recommendation_chain_non_parallel(model)
+        final_output = final_chain.invoke(
+            {
+                "user_summary": table_summarization_chain_results,
+                "business_summary": collection_summary_chain_result_list,
+                "user_messages": ["Hi, I'm having trouble with my phone network"],
+            }
+        )
+
+    def test_entire_chain_non_parallel_v2_bak(self):
+        fake_data_access = DataAccess()
+        model = ChatOpenAI(model_name="gpt-4-1106-preview")
+        user_info = UserInfo(
+            properties=[
+                PropertyInfo(
+                    property_name="age", property_type="int", property_value=30
+                ),
+                PropertyInfo(
+                    property_name="name",
+                    property_type="text",
+                    property_value="John Smith",
+                ),
+                PropertyInfo(
+                    property_name="phone_number",
+                    property_type="text",
+                    property_value="555-555-5555",
+                ),
+                PropertyInfo(
+                    property_name="email",
+                    property_type="text",
+                    property_value="johndoe@example.com",
+                ),
+                PropertyInfo(
+                    property_name="address",
+                    property_type="text",
+                    property_value="123 Main St, Anytown, USA",
+                ),
+                PropertyInfo(
+                    property_name="account_status",
+                    property_type="text",
+                    property_value="Active",
+                ),
+                PropertyInfo(
+                    property_name="plan_type",
+                    property_type="text",
+                    property_value="Unlimited Data Plan",
+                ),
+            ]
+        )
+        relevant_table_chain = (
             {
                 "TableList": RunnableLambda(
                     fake_data_access.get_table_schemas_in_db_v2
@@ -686,63 +772,165 @@ class TestChains(unittest.TestCase):
                 fake_data_access.map_tables_and_populate
             )  # Not the most performant to rebuild column metadata here, but we can optimize later
         )
-        relevant_user_tables = relevant_user_table_chain.invoke(
+        relevant_tables = relevant_table_chain.invoke(
             {"user_info_not_summary": user_info}
         )
-        user_table_summary_chain_result_list = []
-        user_table_summary_chains = [
-            ChainFactory.build_summarization_chain(model, fake_data_access, user_table)
-            for user_table in relevant_user_tables
-        ]
+        factory = ChainFactory()
+        all_user_table_summaries = []
 
-        def run_query(filter_and_summary_pair):
-            collection_filter_inner = filter_and_summary_pair["filter"]
-            user_summary_inner = filter_and_summary_pair["user_info"]
-            search_results_inner = fake_data_access.filtered_ANN_search(
-                collection_filter_inner, user_summary_inner
+        all_collection_keywords = fake_data_access.get_path_segment_keywords()
+        all_table_insights = []
+        for table in relevant_tables:
+            table_summarization_chain = factory.build_summarization_chain(
+                model, fake_data_access, table
             )
-            return search_results_inner
-
-        collection_summary_chain_result_list = []
-        for user_table_chain in user_table_summary_chains:
-            user_table_summary_result = user_table_chain.invoke(
+            table_summarization = table_summarization_chain.invoke(
                 {"user_info_not_summary": user_info}
             )
-            user_table_summary_chain_result_list.append(user_table_summary_result)
+            all_user_table_summaries.append(table_summarization)
 
-            path_segment_chain = factory.build_path_segment_keyword_chain_non_parallel(
-                model, user_table_summary_result, fake_data_access
+            # Build predicates for table:
+            predicate_idenfication_chain = (
+                factory.build_collection_predicate_chain_non_parallel_v2(
+                    model, table_summarization, all_collection_keywords
+                )
             )
-            path_segment_filters_chain_result = path_segment_chain.invoke({})
-            # ^^ [{{"metadata.path_segment_X": "VALUE"}}]
-            for collection_filter in path_segment_filters_chain_result:
-                collection_filter_keyword_dict = {
-                    "filter": collection_filter,
-                    "user_info": user_table_summary_result,
-                }
-                collection_summary_chain = (
-                    collection_filter_keyword_dict
-                    | {"Information": RunnableLambda(run_query)}
-                    | PromptFactory.build_summarization_prompt()
-                    | model
-                    | StrOutputParser()
+            collection_predicates = predicate_idenfication_chain.invoke({})
+            topic_summaries_for_table = []
+            for predicate in collection_predicates:
+                # For each predicate, perform hybrid ANN search.
+                search_results_for_topic = fake_data_access.filtered_ANN_search(
+                    predicate, table_summarization
                 )
-                collection_summary_chain_result = collection_summary_chain.invoke(
-                    collection_filter_keyword_dict
+                summarization_of_topic_chain = (
+                    factory.build_vector_search_summarization_chain(
+                        model, search_results_for_topic
+                    )
                 )
-                collection_summary_chain_result_list.append(
-                    collection_summary_chain_result
+                summarization_of_topic = summarization_of_topic_chain.invoke({})
+                topic_summaries_for_table.append(summarization_of_topic)
+            summarization_of_findings_for_table = (
+                factory.build_vector_search_summarization_chain(
+                    model, topic_summaries_for_table
                 )
-                # Are we supposed to compute this summary for every user table? Maybe that's an okay approach.
+            )
+            insights_on_table = summarization_of_findings_for_table.invoke({})
+            all_table_insights.append(insights_on_table)
 
-        ## Final recommendation chain:
-        final_chain = factory.build_final_recommendation_chain_non_parallel(model)
-        final_output = final_chain.invoke(
+        recommendation_chain = factory.build_final_recommendation_chain_non_parallel(
+            model
+        )
+        recommendation = recommendation_chain.invoke(
             {
-                "user_summary": user_table_summary_chain_result_list,
-                "business_summary": collection_summary_chain_result_list,
+                "user_summary": all_user_table_summaries,
+                "business_summary": all_table_insights,
                 "user_messages": ["Hi, I'm having trouble with my phone network"],
             }
         )
 
-        print(final_output)
+    def test_entire_chain_non_parallel_v2(self) -> None:
+        fake_data_access: DataAccess = DataAccess()
+        model: ChatOpenAI = ChatOpenAI(model_name="gpt-4-1106-preview")
+        user_info: UserInfo = UserInfo(
+            properties=[
+                PropertyInfo(
+                    property_name="age", property_type="int", property_value=30
+                ),
+                PropertyInfo(
+                    property_name="name",
+                    property_type="text",
+                    property_value="John Smith",
+                ),
+                PropertyInfo(
+                    property_name="phone_number",
+                    property_type="text",
+                    property_value="555-555-5555",
+                ),
+                PropertyInfo(
+                    property_name="email",
+                    property_type="text",
+                    property_value="johndoe@example.com",
+                ),
+                PropertyInfo(
+                    property_name="address",
+                    property_type="text",
+                    property_value="123 Main St, Anytown, USA",
+                ),
+                PropertyInfo(
+                    property_name="account_status",
+                    property_type="text",
+                    property_value="Active",
+                ),
+                PropertyInfo(
+                    property_name="plan_type",
+                    property_type="text",
+                    property_value="Unlimited Data Plan",
+                ),
+            ]
+        )
+        relevant_table_chain: Dict[str, Runnable] = (
+            {
+                "TableList": RunnableLambda(
+                    fake_data_access.get_table_schemas_in_db_v2
+                ),
+                "UserInfo": itemgetter("user_info_not_summary"),
+            }
+            | PromptFactory.build_table_identification_prompt()
+            | model
+            | StrOutputParser()
+            | RunnableLambda(PromptFactory.clean_string_v2)
+            | RunnableLambda(fake_data_access.map_tables_and_populate)
+        )
+        relevant_tables: List[str] = relevant_table_chain.invoke(
+            {"user_info_not_summary": user_info}
+        )
+        factory: ChainFactory = ChainFactory()
+        all_user_table_summaries: List[str] = []
+
+        all_collection_keywords: Dict = fake_data_access.get_path_segment_keywords()
+        all_table_insights: List[str] = []
+        for table in relevant_tables:
+            table_summarization_chain: Runnable = factory.build_summarization_chain(
+                model, fake_data_access, table
+            )
+            table_summarization: str = table_summarization_chain.invoke(
+                {"user_info_not_summary": user_info}
+            )
+            all_user_table_summaries.append(table_summarization)
+
+            predicate_idenfication_chain: Runnable = (
+                factory.build_collection_predicate_chain_non_parallel_v2(
+                    model, table_summarization, all_collection_keywords
+                )
+            )
+            collection_predicates: List[str] = predicate_idenfication_chain.invoke({})
+            topic_summaries_for_table: List[str] = []
+            for predicate in collection_predicates:
+                search_results_for_topic: List[
+                    str
+                ] = fake_data_access.filtered_ANN_search(predicate, table_summarization)
+                summarization_of_topic_chain: Runnable = (
+                    factory.build_vector_search_summarization_chain(
+                        model, search_results_for_topic
+                    )
+                )
+                summarization_of_topic: str = summarization_of_topic_chain.invoke({})
+                topic_summaries_for_table.append(summarization_of_topic)
+            summarization_of_findings_for_table: Runnable = (
+                factory.build_vector_search_summarization_chain(
+                    model, topic_summaries_for_table
+                )
+            )
+            insights_on_table: str = summarization_of_findings_for_table.invoke({})
+            all_table_insights.append(insights_on_table)
+
+        recommendation_chain: Runnable = (
+            factory.build_final_recommendation_chain_non_parallel(model)
+        )
+        recommendation: str = recommendation_chain.invoke(
+            {
+                "user_summary": all_user_table_summaries,
+                "business_summary": all_table_insights,
+                "user_messages": ["Hi, I'm having trouble with my phone network"],
+            }
+        )
