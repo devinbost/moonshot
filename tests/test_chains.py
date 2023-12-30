@@ -16,7 +16,7 @@ from langchain_core.runnables import (
 import unittest
 from unittest.mock import MagicMock, patch
 
-import ChainFactory
+from ChainFactory import ChainFactory
 import PromptFactory
 from DataAccess import DataAccess
 import uuid
@@ -282,9 +282,8 @@ class TestChains(unittest.TestCase):
             indexes=[],
             keys=None,
         )
-        chain = ChainFactory.build_summarization_chain(
-            model, fake_data_access, family_plans
-        )
+        factory = ChainFactory()
+        chain = factory.build_summarization_chain(model, fake_data_access, family_plans)
         chain_kwargs = {f"chain0": chain}
         # Pass the dictionary as keyword arguments
         summarization_chains = RunnableParallel(**chain_kwargs)
@@ -453,3 +452,134 @@ class TestChains(unittest.TestCase):
             }
         )
         print(chosen_search_filters)
+
+    def test_astrapy_selection_chain_summarization(self):
+        fake_data_access = DataAccess()
+        path_segment_keywords = fake_data_access.get_path_segment_keywords()
+        model = ChatOpenAI(model_name="gpt-4-1106-preview")
+        user_info_summary = {
+            "chain1": "Summary for Customer John Smith (Phone Number: 555-555-5555):\n\n1. Billing Query (26-Dec-2023): John contacted customer support regarding a higher-than-usual bill and was informed of additional charges for international calls he made. The support agent, Sarah, provided a one-time discount as a courtesy, and the issue was resolved.\n\n2. Network Issue (26-Dec-2023): John reported poor network coverage at his home. Mike from technical support checked and found ongoing maintenance work likely causing the issue. Resolution is expected within 48 hours and John will be updated via email. The issue status is pending.\n\n3. Device Support (26-Dec-2023): John sought assistance with setting up his new phone, particularly with software configuration, email setup, and data transfer from his old phone. Laura from device support provided step-by-step guidance, and the issue was resolved successfully.\n\nJohn's interactions with support show he has a history of billing awareness, experiences network-related concerns, and requires assistance with device setup. These details may inform future recommendations for service plans with clearer billing details, network updates, or device setup services.",
+            "chain2": "Since you haven't provided any specific information to summarize, I can't create a summary for you. Please provide the details or context that you would like to be summarized, and I'll be happy to help.",
+            "chain3": "Summary:\n\nThe Smith family consists of nine members with a range of ages from 16 to 50 years old. Their devices vary from older models like the iPhone 6 to newer ones such as the iPhone 13 and OnePlus 9 Pro. Monthly usage across the family averages between 450 and 800 minutes. The family appears to have multiple support cases, with each member having at least one and some having up to three cases associated with their name. All members share the same primary phone number but have individual numbers for family members. The devices used suggest a mix of iOS and Android preferences within the family.\n\nSpecific member details:\n- John Smith, 29, uses an iPhone 6 and averages 680 minutes monthly.\n- Michael Smith, 42, uses a OnePlus 9 Pro with 800 minutes of usage.\n- Emily Smith, 19, has an iPhone SE and uses around 500 minutes.\n- David Smith, 50, prefers a Google Pixel 6 and uses about 700 minutes a month.\n- Olivia Smith, 24, has a Samsung Galaxy S20, with 600 minutes of usage.\n- William Smith, 33, uses an iPhone 13 and averages 750 minutes.\n- Ava Smith, 16, is on a OnePlus Nord and uses 450 minutes.\n- James Smith, 29, uses a Google Pixel 4a with 680 minutes usage.\n- Sophia Smith, 22, has an iPhone XR and uses approximately 520 minutes.\n\nDevice age and usage patterns could influence recommendations for upgrades or tailored plans to better meet the varying needs of the family members.",
+        }
+        selected_search_filters = [
+            {"metadata.path_segment_1": "support"},
+            {"metadata.path_segment_1": "plans"},
+            {"metadata.path_segment_3": "international-global-calling"},
+            {"metadata.path_segment_3": "account-maintenance-and-management"},
+            {
+                "metadata.path_segment_3": "device-trade-in-value-how-much-is-my-phone-worth"
+            },
+            {
+                "metadata.path_segment_3": "how-to-use-your-smartphone-as-a-mobile-hotspot"
+            },
+            {"metadata.path_segment_3": "protect-against-identity-theft"},
+            {"metadata.path_segment_3": "smartphone-with-best-camera"},
+            {"metadata.path_segment_3": "5g-home-internet-accessories"},
+            {"metadata.path_segment_3": "trade-in-value-your-top-questions-answered"},
+            {"metadata.path_segment_3": "phone-upgrades-your-top-questions-answered"},
+        ]
+
+        def filtered_ANN_search_helper(_dict):
+            return fake_data_access.filtered_ANN_search(
+                _dict["collection_filter"], _dict["user_summary"]
+            )
+
+        summarization_chain = (
+            RunnableLambda(PromptFactory.clean_string_v2)
+            | PromptFactory.build_summarization_prompt(table_schema)
+            | model
+            | StrOutputParser()
+            | RunnableLambda(PromptFactory.clean_string_v2)
+            | RunnableLambda(data_access.exec_cql_query_simple)
+        )
+        # Next, we need to construct the chain for each table.
+        chains = [
+            ChainFactory.build_summarization_chain(model, fake_data_access, table)
+            for table in filtered_tables
+        ]
+        chain_kwargs = {f"chain{i+1}": chain for i, chain in enumerate(chains)}
+        # Pass the dictionary as keyword arguments
+        summarization_chains = RunnableParallel(**chain_kwargs)
+        summary = summarization_chains.invoke(
+            {
+                "property_info": user_info,
+            }
+        )
+        search_results = [
+            fake_data_access.filtered_ANN_search(search_filter, user_info_summary)
+            for search_filter in selected_search_filters
+        ]
+        print(chosen_search_filters)
+
+    def test_entire_chain(self):
+        fake_data_access = DataAccess()
+        model = ChatOpenAI(model_name="gpt-4-1106-preview")
+        user_info = UserInfo(
+            properties=[
+                PropertyInfo(
+                    property_name="age", property_type="int", property_value=30
+                ),
+                PropertyInfo(
+                    property_name="name",
+                    property_type="text",
+                    property_value="John Smith",
+                ),
+                PropertyInfo(
+                    property_name="phone_number",
+                    property_type="text",
+                    property_value="555-555-5555",
+                ),
+                PropertyInfo(
+                    property_name="email",
+                    property_type="text",
+                    property_value="johndoe@example.com",
+                ),
+                PropertyInfo(
+                    property_name="address",
+                    property_type="text",
+                    property_value="123 Main St, Anytown, USA",
+                ),
+                PropertyInfo(
+                    property_name="account_status",
+                    property_type="text",
+                    property_value="Active",
+                ),
+                PropertyInfo(
+                    property_name="plan_type",
+                    property_type="text",
+                    property_value="Unlimited Data Plan",
+                ),
+            ]
+        )
+
+        relevant_user_table_chain = (
+            {
+                "TableList": RunnableLambda(fake_data_access.get_table_schemas_in_db),
+                "UserInfo": itemgetter("user_info_not_summary"),
+            }
+            | PromptFactory.build_table_identification_prompt()
+            | model
+            | StrOutputParser()
+            | RunnableLambda(PromptFactory.clean_string_v2)
+            | RunnableLambda(
+                fake_data_access.map_tables_and_populate
+            )  # Not the most performant to rebuild column metadata here, but we can optimize later
+        )
+        chains = [
+            ChainFactory.build_summarization_chain(model, fake_data_access, table)
+            for table in tables
+        ]
+        chain_kwargs = {f"chain{i+1}": chain for i, chain in enumerate(chains)}
+        # Pass the dictionary as keyword arguments
+        summarization_chains = RunnableParallel(**chain_kwargs)
+        summary = summarization_chains.invoke(
+            {
+                "property_info": user_info,
+            }
+        )
+        table_summarization_chain = ()
+
+        # table_schema.cql_description =
+
+        print(summary)

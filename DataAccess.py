@@ -256,6 +256,26 @@ class DataAccess:
         names = [idx["index_name"] for idx in output]
         return names
 
+    def get_table_schemas_in_db(self) -> List[TableSchema]:
+        session: Session = self.getCqlSession()
+        rows = session.execute("SELECT table_name FROM system_schema.tables;")
+        table_schemas: List[TableSchema] = []
+        for row in rows:
+            table_name: str = row.table_name
+            table_schema = session.execute(
+                f"SELECT * FROM system_schema.columns WHERE keyspace_name = '{keyspace}' AND table_name = '{table_name}'"
+            )
+            columns = [
+                ColumnSchema(column_name=col.column_name, column_type=col.type)
+                for col in table_schema
+            ]
+            table_schemas.append(
+                TableSchema(
+                    table_name=table_name, keyspace_name=keyspace, columns=columns
+                )
+            )
+        return table_schemas
+
     def get_table_schemas(self, keyspace: str) -> List[TableSchema]:
         session: Session = self.getCqlSession()
         session.set_keyspace(keyspace)
@@ -537,6 +557,19 @@ RESULTS:"""
         ]
         return table_schemas
 
+    def map_tables_and_populate(self, json_string: str) -> List[TableSchema]:
+        data = json.loads(json_string)
+        table_schemas = [
+            TableSchema(
+                keyspace_name=obj["keyspace_name"], table_name=obj["table_name"]
+            )
+            for obj in data
+        ]
+        populated = [
+            self.set_table_metadata_and_return(table) for table in table_schemas
+        ]
+        return populated
+
     def filter_matching_tables(
         self, source_tables: List[TableSchema], target_tables: List[TableSchema]
     ):
@@ -573,6 +606,13 @@ RESULTS:"""
         columns = self.get_cql_table_columns(table_schema)
         table_schema.indexes = indexes
         table_schema.columns = columns
+
+    def set_table_metadata_and_return(self, table_schema: TableSchema):
+        indexes = self.get_cql_table_indexes(table_schema)
+        columns = self.get_cql_table_columns(table_schema)
+        table_schema.indexes = indexes
+        table_schema.columns = columns
+        return table_schema
 
     def get_path_segment_keywords(self):
         query = SimpleStatement(

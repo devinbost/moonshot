@@ -115,6 +115,13 @@ def build_collection_vector_find_prompt() -> PromptTemplate:
     return PromptTemplate.from_template(prompt)
 
 
+def get_relevant_user_tables(tables: list[TableSchema], user_info: UserInfo):
+    prefix = get_python_code_gen_prefix()
+    prompt = f"""{prefix} \n I will give you a list of table schemas and some user info, and I want you to return the names of tables that have any column name that matches any of the user info property names."""
+    for table in tables:
+        prompt += table.to_lcel_json()
+
+
 def build_select_query_for_top_three_rows() -> PromptTemplate:
     prefix = get_cql_code_gen_prefix()
     prompt = (
