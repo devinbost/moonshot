@@ -1,4 +1,7 @@
-# General Info
+# Moonshot
+![moonshot_graphic.png](img%2Fmoonshot_graphic.png)
+
+## Automatic Hyperpersonalization
 The purpose of this repo is to use AstraDB with a web crawler to extract code and execute with LangChain and an LLM
 
 Start from UserInterface.py

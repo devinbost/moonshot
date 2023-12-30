@@ -70,7 +70,7 @@ def build_summarization_prompt() -> PromptTemplate:
         "context should be omitted, but technical information that might influence a recommendation or decision "
         "should be included if it might be applicable. Don't be wordy, but provide enough detail so that patterns can "
         "be identified when this summary is combined with others. Any device-specific or plan-specific details should "
-        "be included.)\n"
+        'be included.)\n If it appears that no information was provided for you to summarize, just say "N/A"'
         "Here is the information I want you to summarize:"
         ""
         ""
