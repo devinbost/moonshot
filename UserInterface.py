@@ -1,8 +1,7 @@
 import streamlit as st
 from datetime import datetime
-from Chatbot import Chatbot
+import time
 from Crawler import Crawler
-from DataAccess import DataAccess
 from SitemapCrawler import SitemapCrawler
 from graphviz import Digraph
 from sortedcontainers import SortedSet
@@ -13,8 +12,9 @@ from ClassInspector import (
     get_class_method_params,
     get_class_attributes_from_llm,
 )
-from ComponentData import ComponentData
+from pydantic_models.ComponentData import ComponentData
 from DataAccess import DataAccess
+from pydantic_models.TableDescription import TableDescription
 
 
 class UserInterface:
@@ -84,13 +84,13 @@ def add_element(
     constructor_param_dropdowns,
     constructor_param_inputs,
     output_var,
-    component_type=None,
 ):
     # Extract values from the UI components
     # Assuming these values are stored in variables like self.import_path, self.stage, etc.
     # For the 'new' case in selectboxes, replace with text_input values
     component_params = {}
     component_name = ""
+    component_type = ""
     if access_type == "method":
         method_params_processed = {
             k: (method_param_inputs[k] if v == "new" else v)
@@ -99,6 +99,10 @@ def add_element(
         }
         component_params = method_params_processed
         component_name = selected_method
+        if st.checkbox("Inference method", value=False):
+            component_type = "inference"
+        else:
+            component_type = "setup"
     elif access_type == "constructor":
         constructor_params_processed = {
             k: (constructor_param_inputs[k] if v == "new" else v)
@@ -107,8 +111,10 @@ def add_element(
         }
         component_params = constructor_params_processed
         component_name = "constructor"  # note this.
+        component_type = "setup"
     elif access_type == "property":
         NotImplementedError('elif access_type == "property":')
+        component_type = "setup"
     else:
         NotImplementedError(
             "must currently use method, constructor, or property for access_type"
@@ -130,7 +136,10 @@ def add_element(
 
 def buildInputs(data_access, col1):
     # action_type = col1.selectbox("Action type", ("import", "env", "secret"))
-    library = col1.selectbox("Import path", ("langchain", "llamaindex", "astrapy"))
+    library = col1.selectbox(
+        "Import path",
+        ("langchain", "langchain_core", "langchain_community", "llamaindex", "astrapy"),
+    )
     stage = col1.selectbox("Stage", ("template", "created"))
     class_name = access_type = method_param_dropdowns = method_param_inputs = None
     constructor_param_dropdowns = (
@@ -144,10 +153,10 @@ def buildInputs(data_access, col1):
             class_type = col1.selectbox(
                 "Class type",
                 (
-                    "agents.agent",
-                    "langchain.chains",
+                    "agents",
+                    "chains",
                     "embeddings",
-                    "langchain.llms",
+                    "llms",
                     "document_loaders",
                 ),
             )
@@ -156,48 +165,49 @@ def buildInputs(data_access, col1):
             class_name = col1.selectbox("Class name", SortedSet(matching_classes))
         else:
             class_name = col1.selectbox("Class name", SortedSet(class_names))
-        class_obj = classes[class_name]
-        access_type = col1.selectbox(
-            "Access type", ("property", "method", "constructor")
-        )
-        if access_type == "method":
-            methods = get_class_method_params(class_obj)
-            method_names = methods.keys()
-            selected_method = col1.selectbox("Method name", SortedSet(method_names))
-            param_names = methods[selected_method]
-            method_param_inputs = {}
-            method_param_dropdowns = {}
-
-            build_param_inputs(
-                data_access,
-                col1,
-                method_param_dropdowns,
-                method_param_inputs,
-                param_names,
-                "Method",
+        if class_name is not None:  # i.e. if the filter returned results, if applicable
+            class_obj = classes[class_name]
+            access_type = col1.selectbox(
+                "Access type", ("property", "method", "constructor")
             )
-        elif access_type == "property":
-            NotImplementedError("Needs to implement property get/set actions")
-        elif access_type == "constructor":
-            param_names = get_class_attributes_from_llm(
-                class_obj
-            )  # self.get_class_attributes(class_obj)
-            constructor_param_inputs = {}
-            constructor_param_dropdowns = {}
+            if access_type == "method":
+                methods = get_class_method_params(class_obj)
+                method_names = methods.keys()
+                selected_method = col1.selectbox("Method name", SortedSet(method_names))
+                param_names = methods[selected_method]
+                method_param_inputs = {}
+                method_param_dropdowns = {}
 
-            # It would be nice to find some way to mark which params are required.
+                build_param_inputs(
+                    data_access,
+                    col1,
+                    method_param_dropdowns,
+                    method_param_inputs,
+                    param_names,
+                    "Method",
+                )
+            elif access_type == "property":
+                NotImplementedError("Needs to implement property get/set actions")
+            elif access_type == "constructor":
+                param_names = get_class_attributes_from_llm(
+                    class_obj
+                )  # self.get_class_attributes(class_obj)
+                constructor_param_inputs = {}
+                constructor_param_dropdowns = {}
 
-            # Additionally, at some point, we probably need a layer to simplify names for business people.
-            # And, we need to make it so that environment variables and secrets can be referenced after being added from another place.
-            build_llm_param_inputs(
-                data_access,
-                col1,
-                constructor_param_dropdowns,
-                constructor_param_inputs,
-                param_names,
-                "Constructor",
-            )
-        output_var = col1.text_input("Output variable name")
+                # It would be nice to find some way to mark which params are required.
+
+                # Additionally, at some point, we probably need a layer to simplify names for business people.
+                # And, we need to make it so that environment variables and secrets can be referenced after being added from another place.
+                build_llm_param_inputs(
+                    data_access,
+                    col1,
+                    constructor_param_dropdowns,
+                    constructor_param_inputs,
+                    param_names,
+                    "Constructor",
+                )
+            output_var = col1.text_input("Output variable name")
     addButton = col1.button("Add")
     # Add validation here to ensure we're not adding junk in required inputs are blank.
     if addButton:
@@ -226,17 +236,89 @@ def render(data_access: DataAccess, app_name, chatbot: Chatbot, crawler):
     data_map = data_access.get_data_map()
     updated_graph = data_access.build_graph(data_map, graph)
     col2.graphviz_chart(updated_graph)
-
+    python_code = data_access.generate_python_code()
+    col2.markdown(python_code)
     print("Running render")
     col3.title(app_name)
-    prompt = col3.text_input("Prompt template")
-    question = col3.text_input("Ask a question for the chatbot")
-    title_filter = col3.text_input("(optional) Title Filter")
-    result_size = col3.text_input("(optional) Results to retrieve")
+
+    question = setup_prompt_ui_components(col3, data_access)
+
+    ann_terms = col3.text_input("Terms for ANN")
     searched = col3.button("Search")
     if len(question) > 0 and searched:
-        bot_response = chatbot.runInference(question, prompt, title_filter, result_size)
+        bot_response = chatbot.run_inference_astrapy(
+            terms_for_ann=ann_terms,
+            ann_length=5,
+            collection="langchain_demo1",
+            question=question,
+        )
         if bot_response:
-            col3.write(bot_response["answer"])
-            col3.write("\n\n\n\n")
             col3.write(bot_response)
+    search_via_query = col3.button("Query")
+    desc1 = TableDescription(
+        table_name="support_cases",
+        column_name="phonenumber",
+        description="For user's cell phone, which is a user ID",
+    )
+    desc2 = TableDescription(
+        table_name="support_cases",
+        column_name="case_transcript",
+        description="Contains support transcript for a given case / ticket",
+    )
+    desc3 = TableDescription(
+        table_name="user_plan",
+        column_name="phonenumber",
+        description="For user's cell phone, which is a user ID",
+    )
+    desc4 = TableDescription(
+        table_name="user_plan",
+        column_name="plan_details",
+        description="Describes the plan information",
+    )
+    table_descriptions = [desc1, desc2, desc3, desc4]
+
+    if search_via_query:
+        data_access.summarize_relevant_tables(
+            user_messages=f"USER QUESTION: {question} \n"
+            + " \n \n USER CONTEXT: {userID: 1354, phone: 'galaxy s22', plan: 'unlimited', phonenumber: '238-345-7823'}",
+            tables=table_descriptions,
+        )
+    sitemaps = col3.text_input(
+        "Sitemap URLs to crawl as csv"
+    )  # To do: Handle this input better
+    table_name = col3.text_input("Table to store data")
+    if col3.button("Crawl docs"):
+        progress_bar = col3.progress(0, "Percentage completion of site crawling")
+        start = time.time()
+        # Check if empty
+        sitemap_list = get_sitemap_list_from_csv(sitemaps)
+        crawler.async_crawl_and_ingest_list(sitemap_list, progress_bar, table_name)
+        end = time.time()
+        completion_time = end - start  # Time elapsed in seconds
+        col3.caption(f"Completed parsing docs in {completion_time} seconds")
+
+
+def get_sitemap_list_from_csv(sitemaps):
+    if sitemaps.strip():
+        # Split the string into a list and strip any extra spaces
+        cleaned_list = [item.strip() for item in sitemaps.split(",")]
+    else:
+        # If the string is empty, return an empty list
+        cleaned_list = []
+    return cleaned_list
+
+
+def setup_prompt_ui_components(col3, data_access):
+    prompt_search = col3.text_input("Find prompt")
+    matching_prompts = data_access.get_matching_prompts(prompt_search)
+    prompts = [s["prompt"] for s in matching_prompts]
+    question_list = col3.selectbox("Select existing prompt", SortedSet(prompts))
+    load_prompt = col3.button("Load prompt")
+    if load_prompt:
+        question = col3.text_area("Ask a question for the chatbot", value=question_list)
+    else:
+        question = col3.text_area("Ask a question for the chatbot")
+    save_button = col3.button("Save prompt")
+    if save_button:
+        data_access.save_prompt(question)
+    return question
