@@ -1,13 +1,16 @@
 from cassandra.cluster import (
     Cluster,
     Session,
+    ResultSet,
 )
+from cassandra.query import dict_factory
 from typing import List, Dict, Tuple, Any
 from cassandra.auth import PlainTextAuthProvider
 import hashlib
 import os
 import json
 from astrapy.db import AstraDB as AstraPyDB, AstraDBCollection
+from cassandra.query import SimpleStatement
 from graphviz import Digraph
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -23,6 +26,7 @@ from langchain.vectorstores import AstraDB
 
 from pydantic_models.TableDescription import TableDescription
 from pydantic_models.ColumnSchema import ColumnSchema
+from pydantic_models.TableKey import TableKey
 from pydantic_models.TableSchema import TableSchema
 
 
@@ -201,6 +205,57 @@ class DataAccess:
         else:
             return ""
 
+    def exec_cql_query(self, keyspace: str, query: str) -> List[dict]:
+        """Remember, we need to sanitize this!"""
+        session: Session = self.getCqlSession()
+        session.set_keyspace(keyspace)
+        query_stmt = SimpleStatement(query)
+        session.row_factory = dict_factory
+        rows: List[dict] = session.execute(query_stmt).all()
+        return rows
+
+    def exec_cql_query_simple(self, query: str) -> List[dict]:
+        """Remember, we need to sanitize this!"""
+        session: Session = self.getCqlSession()
+        query_stmt = SimpleStatement(query)
+        session.row_factory = dict_factory
+        rows: List[dict] = session.execute(query_stmt).all()
+        return rows
+
+    def get_cql_table_description(self, table_schema: TableSchema) -> str:
+        output = self.exec_cql_query_simple(
+            f"describe {table_schema.keyspace_name}.{table_schema.table_name};"
+        )
+        return output
+
+    def get_cql_table_columns(self, table_schema: TableSchema) -> List[ColumnSchema]:
+        query = f"SELECT * FROM system_schema.columns WHERE keyspace_name = '{table_schema.keyspace_name}' AND table_name = '{table_schema.table_name}';"
+        output = self.exec_cql_query_simple(query)
+        table_columns = [
+            ColumnSchema(
+                **{
+                    key: item[key]
+                    for key in [
+                        "column_name",
+                        "clustering_order",
+                        "kind",
+                        "position",
+                        "type",
+                    ]
+                }
+            )
+            for item in output
+            if item["kind"] != "regular"
+        ]
+        return table_columns
+
+    def get_cql_table_indexes(self, table_schema: TableSchema) -> list[str]:
+        output = self.exec_cql_query_simple(
+            f"SELECT * FROM system_schema.indexes WHERE keyspace_name = '{table_schema.keyspace_name}' AND table_name = '{table_schema.table_name}';"
+        )
+        names = [idx["index_name"] for idx in output]
+        return names
+
     def get_table_schemas(self, keyspace: str) -> List[TableSchema]:
         session: Session = self.getCqlSession()
         session.set_keyspace(keyspace)
@@ -220,7 +275,7 @@ class DataAccess:
             ]
             table_schemas.append(
                 TableSchema(
-                    table_name=table_name, schema_name=keyspace, columns=columns
+                    table_name=table_name, keyspace_name=keyspace, columns=columns
                 )
             )
         return table_schemas
@@ -230,7 +285,7 @@ class DataAccess:
     ) -> List[TableSchema]:
         session: Session = self.getCqlSession()
         for table_schema in table_schemas:
-            query = f"SELECT * FROM {table_schema.schema_name}.{table_schema.table_name} LIMIT 3"
+            query = f"SELECT * FROM {table_schema.keyspace_name}.{table_schema.table_name} LIMIT 3"
             rows = session.execute(query)
             table_schema.rows = [
                 {
@@ -240,6 +295,19 @@ class DataAccess:
                 for row in rows
             ]
         return table_schemas
+
+    def get_table_schemas_in_db(self) -> List[TableSchema]:
+        output = self.exec_cql_query_simple(
+            "SELECT keyspace_name, table_name FROM system_schema.tables"
+        )
+        tables = [
+            TableSchema(**{key: item[key] for key in ["keyspace_name", "table_name"]})
+            for item in output
+            if "system" not in item["keyspace_name"]
+        ]
+        for table in tables:
+            self.set_table_metadata(table)
+        return tables
 
     # Use the following method only as a fallback in case the LLM can't get this info for some reason
     def get_table_schemas_that_contain_user_properties(
@@ -459,6 +527,30 @@ RESULTS:"""
         clean_result = ClassInspector.remove_json_formatting(result)
         return clean_result
 
+    def map_tables(self, json_string: str) -> List[TableSchema]:
+        data = json.loads(json_string)
+        table_schemas = [
+            TableSchema(
+                keyspace_name=obj["keyspace_name"], table_name=obj["table_name"]
+            )
+            for obj in data
+        ]
+        return table_schemas
+
+    def filter_matching_tables(
+        self, source_tables: List[TableSchema], target_tables: List[TableSchema]
+    ):
+        # Creating set for improved matching performance:
+        target_set = {
+            (table.keyspace_name, table.table_name) for table in target_tables
+        }
+        filtered_tables = [
+            table
+            for table in source_tables
+            if (table.keyspace_name, table.table_name) in target_set
+        ]
+        return filtered_tables
+
     def get_relevant_columns(
         self, table_descriptions: List[TableDescription]
     ) -> List[str]:
@@ -475,6 +567,12 @@ RESULTS:"""
         columns_as_json = json.loads(clean_result)
         column_name_list = [item["column_name"] for item in columns_as_json]
         return column_name_list
+
+    def set_table_metadata(self, table_schema: TableSchema):
+        indexes = self.get_cql_table_indexes(table_schema)
+        columns = self.get_cql_table_columns(table_schema)
+        table_schema.indexes = indexes
+        table_schema.columns = columns
 
 
 def get_distinct_path_segments(session, segment_key):

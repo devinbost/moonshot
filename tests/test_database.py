@@ -1,10 +1,69 @@
+import os
 import unittest
 from unittest.mock import MagicMock, patch
+
+from cassandra.auth import PlainTextAuthProvider
+from cassandra.cluster import Cluster, Session
+from cassandra.query import SimpleStatement
+
 from DataAccess import DataAccess
 import uuid
 
+from pydantic_models.ColumnSchema import ColumnSchema
+from pydantic_models.TableKey import TableKey
+from pydantic_models.TableSchema import TableSchema
+from Config import config
+
 
 class TestGetTableSchemas(unittest.TestCase):
+    def test_populate_indexes(self):
+        fake_data_access = DataAccess()
+        table_schema = TableSchema(
+            keyspace_name="telecom",
+            table_name="customer_support_transcripts",
+            columns=[
+                ColumnSchema(column_name="id", column_type="int"),
+                ColumnSchema(column_name="name", column_type="string"),
+            ],
+        )
+        indexes = fake_data_access.get_cql_table_indexes(table_schema)
+
+        self.assertEqual(
+            [
+                "customer_support_transcripts_issue_type_idx",
+                "customer_support_transcripts_resolution_status_idx",
+            ],
+            indexes,
+        )
+
+    def test_populate_keys(self):
+        fake_data_access = DataAccess()
+        table_schema = TableSchema(
+            keyspace_name="telecom",
+            table_name="customer_support_transcripts",
+            columns=[
+                ColumnSchema(column_name="id", column_type="int"),
+                ColumnSchema(column_name="name", column_type="string"),
+            ],
+        )
+        indexes = fake_data_access.get_cql_table_columns(table_schema)
+        expected_keys = [
+            TableKey(
+                column_name="phone_number",
+                clustering_order="none",
+                kind="partition_key",
+                position=0,
+            ),
+            TableKey(
+                column_name="transcript_id",
+                clustering_order="asc",
+                kind="clustering",
+                position=0,
+            ),
+        ]
+
+        self.assertEqual(expected_keys, indexes)
+
     @patch("DataAccess.DataAccess.getCqlSession")
     def test_get_table_schemas(self, mock_get_session):
         # Mock data
