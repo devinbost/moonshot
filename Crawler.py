@@ -21,6 +21,11 @@ from pydantic_models.PageContent import PageContent
 
 class Crawler:
     def __init__(self, data_access: DataAccess):
+        """
+        Initialize the Crawler with a DataAccess object.
+        Parameters:
+            data_access (DataAccess): The data access object to interact with the database.
+        """
         self.ui_update_in_progress = False
         self.data_access = data_access
         self.urls = None
@@ -31,10 +36,23 @@ class Crawler:
         )  # limit to 10 concurrent tasks, adjust as needed
         self.sitemap_gen_semaphore = asyncio.Semaphore(20)
 
-    def get_url_count(self):
+    def get_url_count(self) -> int:
+        """
+        Returns the count of URLs that the crawler has processed or will process.
+        Returns:
+            int: The count of URLs.
+        """
         return len(self.urls)
 
-    def get_sitemap_urls(self, sitemap_url: str, onlyEnglish: bool):
+    def get_sitemap_urls(self, sitemap_url: str, onlyEnglish: bool) -> List[str]:
+        """
+        Retrieves URLs from a given sitemap.
+        Parameters:
+            sitemap_url (str): The URL of the sitemap to crawl.
+            onlyEnglish (bool): Flag to indicate whether to retrieve only English URLs.
+        Returns:
+            List[str]: A list of URLs from the sitemap.
+        """
         # Need to fix issue where it doesn't detect if onlyEnglish has been changed and will use the wrong cache file.
         urls = None  # self.load_urls_from_file() # Always do clean pull until we have smarter caching.
         if urls is None:
@@ -60,6 +78,14 @@ class Crawler:
     async def extract_page_content(
         self, url: str, session: ClientSession
     ) -> PageContent | None:
+        """
+        Asynchronously extracts page content from a given URL using an HTTP session.
+        Parameters:
+            url (str): The URL from which to extract content.
+            session (ClientSession): The HTTP client session for making requests.
+        Returns:
+            PageContent | None: The extracted page content or None if extraction fails.
+        """
         logging.info(f"Extracting content from URL: {url}")
         try:
             async with session.get(url) as response:
@@ -89,6 +115,14 @@ class Crawler:
             return None
 
     async def async_chunk_page(self, url: str, session: ClientSession) -> PageContent:
+        """
+        Asynchronously chunks a page content from a given URL.
+        Parameters:
+            url (str): The URL from which to chunk content.
+            session (ClientSession): The HTTP client session for making requests.
+        Returns:
+            PageContent: The chunked page content.
+        """
         page_content = await self.extract_page_content(url, session)
         if page_content is not None:
             chunks = self.data_access.splitter.split_text(page_content.content)
@@ -102,6 +136,14 @@ class Crawler:
         session: ClientSession,
         table_name: str,
     ):
+        """
+        Asynchronously handles processing of a single URL.
+        Parameters:
+            url (str): The URL to process.
+            progress_bar (DeltaGenerator): Streamlit UI element for progress indication.
+            session (ClientSession): The HTTP client session for making requests.
+            table_name (str): The name of the table where data is to be stored.
+        """
         async with self.semaphore:  # this will wait if there are already too many tasks running:
             page_content = await self.async_chunk_page(url, session)
             if page_content is not None:
@@ -159,6 +201,12 @@ class Crawler:
             await self.update_UI(self.counter, progress_bar)
 
     async def update_UI(self, counter: int, progress_bar: DeltaGenerator):
+        """
+        Asynchronously updates the user interface with the progress of crawling.
+        Parameters:
+            counter (int): The current count of processed URLs.
+            progress_bar (DeltaGenerator): Streamlit UI element for progress indication.
+        """
         total_url_count = self.get_url_count()
         percentage_completion = ((counter + 1) / total_url_count) * 100
         print(f"Completed {counter} out of {total_url_count} in total")
@@ -173,6 +221,13 @@ class Crawler:
         self.ui_update_in_progress = False
 
     async def process_urls(self, progress_bar: DeltaGenerator, table_name: str):
+        """
+        Asynchronously processes a list of URLs.
+        Parameters:
+            progress_bar (DeltaGenerator): Streamlit UI element for progress indication.
+            table_name (str): The name of the table where data is to be stored.
+        """
+
         timeout = aiohttp.ClientTimeout(
             total=30
         )  # 10 seconds timeout for the entire request process
@@ -188,6 +243,13 @@ class Crawler:
     def async_crawl_and_ingest(
         self, sitemap_url: str, progress_bar: DeltaGenerator, table_name: str
     ):
+        """
+        Asynchronously crawls and ingests data from a given sitemap URL.
+        Parameters:
+            sitemap_url (str): The sitemap URL to crawl.
+            progress_bar (DeltaGenerator): Streamlit UI element for progress indication.
+            table_name (str): The name of the table where data is to be stored.
+        """
         if self.urls is None:
             # TODO: Need to cache the following step:
             self.urls = self.get_sitemap_urls(sitemap_url, onlyEnglish=True)
@@ -200,8 +262,15 @@ class Crawler:
             loop.close()
 
     def async_crawl_and_ingest_list(
-        self, sitemap_url_list: list[str], progress_bar: DeltaGenerator, table_name: str
+        self, sitemap_url_list: List[str], progress_bar: DeltaGenerator, table_name: str
     ):
+        """
+        Asynchronously crawls and ingests data from a list of sitemap URLs.
+        Parameters:
+            sitemap_url_list (List[str]): A list of sitemap URLs to crawl.
+            progress_bar (DeltaGenerator): Streamlit UI element for progress indication.
+            table_name (str): The name of the table where data is to be stored.
+        """
         if self.urls is None:
             # TODO: Need to cache the following step:
             all_urls = [

@@ -2,7 +2,7 @@ import json
 import logging
 from datetime import datetime
 from operator import itemgetter
-from typing import List, Dict
+from typing import List, Dict, Any
 
 from langchain.chains import ConversationalRetrievalChain
 from langchain_core.prompts import ChatPromptTemplate
@@ -32,6 +32,11 @@ from pydantic_models.UserInfo import UserInfo
 class Chatbot:
     # Need to refactor this class at some point to support multiple LLM providers
     def __init__(self, data_access: DataAccess):
+        """
+        Initialize the Chatbot with a data access object.
+        Parameters:
+            data_access (DataAccess): The data access object to interact with the database.
+        """
         self.our_responses = [""]
         self.column = None
         self.user_messages = [""]
@@ -70,11 +75,26 @@ class Chatbot:
             return_source_documents=True,
         )
 
-    def similarity_search_top_k(self, question: str, top_k: int):
+    def similarity_search_top_k(
+        self, question: str, top_k: int
+    ) -> List[Dict[str, Any]]:
+        """
+        Conducts a similarity search for the given question and returns the top K results.
+        Parameters:
+            question (str): The question to search for.
+            top_k (int): The number of top results to return.
+        Returns:
+            List[Dict[str, Any]]: The top K similar results from the similarity search.
+        """
         results = self.data_access.vector_store.similarity_search(question, top_k)
         return results
 
-    def print_results(self, results):
+    def print_results(self, results: List[Dict[str, Any]]) -> None:
+        """
+        Prints the search results.
+        Parameters:
+            results (List[Dict[str, Any]]): The search results to be printed.
+        """
         for row in results:
             print(f"""{row.page_content}\n""")
 
@@ -84,7 +104,17 @@ class Chatbot:
         ann_length: int,
         collection: str,
         question: str,
-    ) -> object:
+    ) -> Any:
+        """
+        Runs inference using the AstraPy model with Approximate Nearest Neighbor (ANN) search.
+        Parameters:
+            terms_for_ann (str): Terms to be used for ANN search.
+            ann_length (int): The number of results to retrieve from the ANN search.
+            collection (str): The collection to search within.
+            question (str): The question to be answered.
+        Returns:
+            Any: The response from the inference.
+        """
         vector_store = self.data_access.setupVectorStoreNew(collection=collection)
         results = vector_store.similarity_search(terms_for_ann, k=ann_length)
         for doc in results:
@@ -108,7 +138,14 @@ class Chatbot:
         logging.info(response)
         return response
 
-    def runInference(self, question: str) -> dict:
+    def runInference(self, question: str) -> Dict[str, Any]:
+        """
+        Runs inference to answer a given question using the model and data access object.
+        Parameters:
+            question (str): The question to be answered.
+        Returns:
+            Dict[str, Any]: The response from the inference.
+        """
         topK = self.similarity_search_top_k(question, 10)
         bot_response = self.rag_chain(
             {
@@ -124,7 +161,12 @@ class Chatbot:
         # We may want to also capture bot_response["source_documents"] for analytics later
         return bot_response
 
-    def log_response(self, bot_message: str):
+    def log_response(self, bot_message: str) -> None:
+        """
+        Logs the bot's response.
+        Parameters:
+            bot_message (str): The message to be logged.
+        """
         print(bot_message)
         logging.info(bot_message)
         self.column.text_area(
@@ -133,7 +175,18 @@ class Chatbot:
             key=datetime.utcnow().strftime("%Y%m%d%H%M%S%f"),
         )
 
-    def answer_customer(self, user_message: str, user_info: UserInfo, column):
+    def answer_customer(
+        self, user_message: str, user_info: UserInfo, column: Any
+    ) -> str:
+        """
+        Provides an answer to the customer's query.
+        Parameters:
+            user_message (str): The customer's message.
+            user_info (UserInfo): The user information.
+            column (Any): The UI column to display the response.
+        Returns:
+            str: The bot's response to the customer.
+        """
         self.column = column
         fake_data_access: DataAccess = DataAccess()
         model: ChatOpenAI = ChatOpenAI(model_name="gpt-4-1106-preview")

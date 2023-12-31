@@ -20,7 +20,17 @@ class ChainFactory:
     @staticmethod
     def build_summarization_chain(
         model: ChatOpenAI, data_access: DataAccess, table_schema: TableSchema
-    ):
+    ) -> Runnable:
+        """
+        Builds a chain for summarizing table data using a specified model and data access object.
+        Parameters:
+            model (ChatOpenAI): The model to be used for generating prompts and processing responses.
+            data_access (DataAccess): The data access object for executing queries.
+            table_schema (TableSchema): The schema of the table to be summarized.
+        Returns:
+            Runnable: A runnable chain for table data summarization.
+        """
+
         def test_func(testme: Dict[str, Any]) -> Any:
             print(testme)
             print(table_schema)
@@ -57,7 +67,16 @@ class ChainFactory:
 
     def build_summarization_chain_set(
         self, model: ChatOpenAI, data_access: DataAccess, tables: List[TableSchema]
-    ):
+    ) -> RunnableParallel:
+        """
+        Builds a set of summarization chains for a list of table schemas.
+        Parameters:
+            model (ChatOpenAI): The model to be used for generating prompts and processing responses.
+            data_access (DataAccess): The data access object for executing queries.
+            tables (List[TableSchema]): A list of table schemas to be summarized.
+        Returns:
+            RunnableParallel: A parallel runnable chain for summarizing multiple tables.
+        """
         chains = [
             self.build_summarization_chain(model, data_access, table)
             for table in tables
@@ -69,7 +88,16 @@ class ChainFactory:
 
     def build_collection_summarization_chain(
         model: ChatOpenAI, data_access: DataAccess, table_schema: TableSchema
-    ):
+    ) -> Runnable:
+        """
+        Builds a chain for summarizing collection data using a specified model and data access object.
+        Parameters:
+            model (ChatOpenAI): The model to be used for generating prompts and processing responses.
+            data_access (DataAccess): The data access object for executing queries.
+            table_schema (TableSchema): The schema of the table to be summarized.
+        Returns:
+            Runnable: A runnable chain for collection data summarization.
+        """
         top3_chain = (
             PromptFactory.build_select_query_for_top_three_rows_parallelizable(
                 table_schema
@@ -106,7 +134,17 @@ class ChainFactory:
 
     def build_user_summarization_chain_parallelizable(
         self, data_access: DataAccess, model: ChatOpenAI, user_info: UserInfo
-    ):
+    ) -> RunnableParallel:
+        """
+        Builds a user summarization chain that is parallelizable.
+        Parameters:
+            data_access (DataAccess): The data access object for executing queries.
+            model (ChatOpenAI): The model to be used for generating prompts and processing responses.
+            user_info (UserInfo): User information to be used in the summarization process.
+        Returns:
+            RunnableParallel: A parallelizable runnable chain for user data summarization.
+        """
+
         def testme2(testme):
             print(testme)
             return testme["user_info_not_summary"]
@@ -139,10 +177,18 @@ class ChainFactory:
         model: ChatOpenAI,
         user_info_summary_parallelizable_chain: RunnableParallel,
         data_access: DataAccess,
-    ):
+    ) -> Runnable:
         """
-        Returns list of filters like this: [{{"metadata.path_segment_X": "VALUE"}}]
+        Builds a chain for extracting path segment keywords.
+        Parameters:
+            model (ChatOpenAI): The model to be used for generating prompts and processing responses.
+            user_info_summary_parallelizable_chain (RunnableParallel): A parallelizable chain for user information summarization.
+            data_access (DataAccess): The data access object for executing queries.
+        Returns:
+            Runnable: A runnable chain for path segment keyword extraction that list of filters like this:
+            [{{"metadata.path_segment_X": "VALUE"}}]
         """
+
         path_segment_keyword_chain = (
             {
                 "PathSegmentValues": RunnableLambda(
@@ -160,11 +206,18 @@ class ChainFactory:
     def build_collection_predicate_chain_non_parallel(
         self,
         model: ChatOpenAI,
-        user_info_summary,
+        user_info_summary: Any,
         data_access: DataAccess,
-    ):
+    ) -> Runnable:
         """
-        Returns list of filters like this: [{{"metadata.path_segment_X": "VALUE"}}]
+        Builds a non-parallel chain for collection predicate extraction.
+        Parameters:
+            model (ChatOpenAI): The model to be used for generating prompts and processing responses.
+            user_info_summary (Any): The summary of user information.
+            data_access (DataAccess): The data access object for executing queries.
+        Returns:
+            Runnable: A runnable chain for collection predicate extraction.
+            that Returns list of filters like this: [{{"metadata.path_segment_X": "VALUE"}}]
         """
         path_segment_keyword_chain = (
             {
@@ -185,9 +238,16 @@ class ChainFactory:
         model: ChatOpenAI,
         table_summarization: str,
         all_keywords: Dict[str, List[str]],
-    ):
+    ) -> Runnable:
         """
-        Returns list of filters like this: [{{"metadata.path_segment_X": "VALUE"}}]
+        Builds a non-parallel version 2 chain for collection predicate extraction.
+        Parameters:
+            model (ChatOpenAI): The model to be used for generating prompts and processing responses.
+            table_summarization (str): The summarization of table data.
+            all_keywords (Dict[str, List[str]]): A dictionary of all keywords to be considered.
+        Returns:
+            Runnable: A runnable chain for collection predicate extraction.
+            that Returns list of filters like this: [{{"metadata.path_segment_X": "VALUE"}}]
         """
         all_keywords_string: str = json.dumps(all_keywords)
         # print("All Keywords String:", all_keywords_string)
@@ -215,8 +275,16 @@ class ChainFactory:
         return path_segment_keyword_chain
 
     def build_vector_search_summarization_chain(
-        self, model, search_results: str
+        self, model: ChatOpenAI, search_results: str
     ) -> Runnable:
+        """
+        Builds a chain for summarizing vector search results.
+        Parameters:
+            model (ChatOpenAI): The model to be used for generating prompts and processing responses.
+            search_results (str): The search results to be summarized.
+        Returns:
+            Runnable: A runnable chain for vector search result summarization.
+        """
         collection_summary_chain = (
             {"Information": RunnableLambda(lambda x: search_results)}
             | PromptFactory.build_summarization_prompt()
@@ -230,9 +298,15 @@ class ChainFactory:
         model: ChatOpenAI,
         user_info_summary_parallelizable_chain: RunnableParallel,
         data_access: DataAccess,
-    ):
+    ) -> Runnable:
         """
-        Returns summaries
+        Builds a chain for summarizing AstraPy collection data.
+        Parameters:
+            model (ChatOpenAI): The model to be used for generating prompts and processing responses.
+            user_info_summary_parallelizable_chain (RunnableParallel): A parallelizable chain for user information summarization.
+            data_access (DataAccess): The data access object for executing queries.
+        Returns:
+            Runnable: A runnable chain for AstraPy collection data summarization.
         """
 
         def run_query(filter_and_summary):
@@ -266,11 +340,17 @@ class ChainFactory:
     def build_astrapy_collection_summarization_chain_v2(
         self,
         model: ChatOpenAI,
-        user_info_summary,
+        user_info_summary: Any,
         data_access: DataAccess,
-    ):
+    ) -> Runnable:
         """
-        Returns summaries
+        Builds a version 2 chain for summarizing AstraPy collection data.
+        Parameters:
+            model (ChatOpenAI): The model to be used for generating prompts and processing responses.
+            user_info_summary (Any): The summary of user information.
+            data_access (DataAccess): The data access object for executing queries.
+        Returns:
+            Runnable: A runnable chain for AstraPy collection data summarization.
         """
 
         path_segment_keyword_chain = (
@@ -298,9 +378,15 @@ class ChainFactory:
         model: ChatOpenAI,
         user_info_summary_parallelizable_chain: RunnableParallel,
         data_access: DataAccess,
-    ):
+    ) -> Runnable:
         """
-        Returns summaries
+        Builds a preparatory chain for summarizing AstraPy collection data.
+        Parameters:
+            model (ChatOpenAI): The model to be used for generating prompts and processing responses.
+            user_info_summary_parallelizable_chain (RunnableParallel): A parallelizable chain for user information summarization.
+            data_access (DataAccess): The data access object for executing queries.
+        Returns:
+            Runnable: A runnable chain for AstraPy collection data summarization preparation.
         """
 
         path_segment_keyword_chain = (
@@ -328,7 +414,16 @@ class ChainFactory:
         user_summarization_chain_parallelizable: RunnableParallel,
         collection_summarization_chain_parallelizable: RunnableParallel,
         model: ChatOpenAI,
-    ):
+    ) -> Runnable:
+        """
+        Builds a final recommendation chain combining user and collection summarization chains.
+        Parameters:
+            user_summarization_chain_parallelizable (RunnableParallel): A parallelizable chain for user summarization.
+            collection_summarization_chain_parallelizable (RunnableParallel): A parallelizable chain for collection summarization.
+            model (ChatOpenAI): The model to be used for generating prompts and processing responses.
+        Returns:
+            Runnable: A runnable chain for final recommendation.
+        """
         final_chain = (
             {
                 "UserSummary": user_summarization_chain_parallelizable,

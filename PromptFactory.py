@@ -15,27 +15,57 @@ from pydantic_models.UserInfo import UserInfo
 from langchain_core.runnables import RunnableBranch, RunnableSerializable
 
 
-def get_python_code_gen_prefix():
+def get_python_code_gen_prefix() -> str:
+    """
+    Returns a prefix for generating Python code generation prompts.
+    This prefix instructs the assistant to focus solely on generating Python code based on a given scenario without any additional explanation or summary.
+    Returns:
+        str: The prefix string for Python code generation prompts.
+    """
     return f"""You're a helpful assistant. I will give you a scenario, and I want you to generate Python code that performs the task. Don't give me any summary information, explanation, or introduction. Don't say anything other than the code. \n"""
 
 
-def get_cql_code_gen_prefix():
+def get_cql_code_gen_prefix() -> str:
+    """
+    Returns a prefix for generating CQL (Cassandra Query Language) code generation prompts.
+    This prefix guides the assistant to generate valid CQL code for AstraDB/Cassandra tasks without offering any extra information or context.
+    Returns:
+        str: The prefix string for CQL code generation prompts.
+    """
     return f"""You're a helpful assistant. I will give you a scenario, and I want you to generate valid CQL code (for 
     AstraDB/Cassandra) that performs the task. Don't give me any summary information, explanation, or introduction. 
     Don't say anything other than the code. \n"""
 
 
-def get_personal_response_prefix():
+def get_personal_response_prefix() -> str:
+    """
+    Returns a prefix for generating personal and empathetic responses in customer interactions.
+    This prefix sets the tone for respectful and empathetic communication with customers.
+    Returns:
+        str: The prefix string for personal response generation.
+    """
     return f"""You're a helpful assistant. You're talking to a customer, so be respectful and show empathy.
     \n"""
 
 
-def get_helpful_assistant_prefix():
+def get_helpful_assistant_prefix() -> str:
+    """
+    Returns a prefix for generating concise and direct responses from the assistant.
+    This prefix instructs the assistant to provide responses strictly adhering to the specified request without any additional information or elaboration.
+    Returns:
+        str: The prefix string for concise and direct assistant responses.
+    """
     return f"""You're a helpful assistant. Don't give me any summary information, explanation, or introduction. In 
     fact, don't say anything other than what I specify. \n"""
 
 
-def build_filter_and_summary_joiner_prompt():
+def build_filter_and_summary_joiner_prompt() -> PromptTemplate:
+    """
+    Builds and returns a prompt template for combining filters and user information into a single JSON object.
+    The prompt is designed to join user summary information with filters to create a combined JSON object for subsequent processing.
+    Returns:
+        PromptTemplate: The constructed prompt template for filter and summary joining.
+    """
     prompt = (
         get_helpful_assistant_prefix()
         + """You will be given a list of filters in this format: [{{"metadata.path_segment_X": "VALUE"}}]
@@ -55,7 +85,13 @@ def build_filter_and_summary_joiner_prompt():
     return PromptTemplate.from_template(prompt)
 
 
-def build_table_identification_prompt():
+def build_table_identification_prompt() -> PromptTemplate:
+    """
+    Builds and returns a prompt template for identifying relevant tables based on user information and table schemas.
+    The prompt aims to select tables with columns that match or are likely to match user properties, helping to focus on relevant data.
+    Returns:
+        PromptTemplate: The constructed prompt template for table identification.
+    """
     prompt: str = (
         get_helpful_assistant_prefix()
         + """You are also a great Cassandra database engineer. Your goal is to identify tables that likely contain 
@@ -83,6 +119,12 @@ def build_table_identification_prompt():
 
 
 def build_final_response_prompt() -> PromptTemplate:
+    """
+    Constructs a prompt template for generating a final recommendation to a customer.
+    The prompt synthesizes user summaries, business insights, and conversation history to formulate a recommendation that aligns with the customer's needs and interests.
+    Returns:
+        PromptTemplate: The constructed prompt template for final response generation.
+    """
     prompt = (
         get_personal_response_prefix()
         + """"You are responsible for representing the business to the customer for both sales and customer support purposes. 
@@ -121,6 +163,12 @@ def build_final_response_prompt() -> PromptTemplate:
 
 
 def build_summarization_prompt() -> PromptTemplate:
+    """
+    Creates a prompt template for summarizing provided information, focusing on technical details that could influence recommendations or decisions.
+    The prompt is intended to yield concise summaries that highlight key information relevant to customer support or business insights.
+    Returns:
+        PromptTemplate: The constructed prompt template for summarization.
+    """
     prompt = (
         "You're a helpful assistant. I'm will give you some information, and I want you to summarize what I'm "
         "providing you. This information will be used to either summarize something about a customer or "
@@ -142,6 +190,12 @@ def build_summarization_prompt() -> PromptTemplate:
 
 
 def build_collection_vector_find_prompt() -> PromptTemplate:
+    """
+    Develops a prompt template for generating a JSON object with metadata path segment keys based on vector data and user information.
+    The prompt guides the assistant to select the most appropriate metadata path segments and construct JSON objects to aid in article retrieval.
+    Returns:
+        PromptTemplate: The constructed prompt template for collection vector find.
+    """
     prompt = (
         get_helpful_assistant_prefix()
         + """ Based on the provided summary
@@ -264,6 +318,12 @@ USER INFORMATION SUMMARY:
 
 
 def build_collection_vector_find_prompt_v2() -> PromptTemplate:
+    """
+    Constructs a version 2 prompt template for creating JSON objects using metadata path segments.
+    This prompt specifically focuses on aligning the JSON objects with the customer's intent and information, ensuring relevance in article retrieval.
+    Returns:
+        PromptTemplate: The constructed prompt template for collection vector find version 2.
+    """
     prompt = (
         get_helpful_assistant_prefix()
         + """ I will give you 6 lists of keywords and information about a customer. I want you to use the information to create a list of JSON objects. These JSON objects will be used in a later step to construct queries that will be used to find articles with information that should help the customer. 
@@ -324,6 +384,12 @@ def get_relevant_user_tables(tables: list[TableSchema], user_info: UserInfo):
 
 
 def build_select_query_for_top_three_rows() -> PromptTemplate:
+    """
+    Builds a prompt template for generating a SELECT query to retrieve the top three rows from a given table schema.
+    The prompt specifically requests a SELECT query with a LIMIT of 3, adhering to CQL syntax.
+    Returns:
+        PromptTemplate: The constructed prompt template for SELECT query generation.
+    """
     prefix = get_cql_code_gen_prefix()
     prompt = (
         prefix
@@ -339,6 +405,15 @@ def build_select_query_for_top_three_rows() -> PromptTemplate:
 def build_select_query_for_top_three_rows_parallelizable(
     table_schema: TableSchema,
 ) -> PromptTemplate:
+    """
+    Constructs a parallelizable prompt template for creating a SELECT query to fetch the top three rows of a specified table schema.
+    The prompt directs the generation of a CQL SELECT query with a LIMIT of 3, focusing on the provided table schema.
+    Parameters:
+        table_schema (TableSchema): The schema of the table for query generation.
+    Returns:
+        PromptTemplate: The constructed prompt template for parallelizable SELECT query generation.
+    """
+
     prefix = get_cql_code_gen_prefix()
     prompt = (
         prefix
@@ -352,6 +427,12 @@ def build_select_query_for_top_three_rows_parallelizable(
 
 
 def build_select_query_with_where() -> PromptTemplate:
+    """
+    Creates a prompt template for formulating a SELECT query with a WHERE clause based on matching table schema properties and user information.
+    The prompt aims to generate a relevant SELECT query that filters data according to user-related criteria, ensuring query validity and relevance.
+    Returns:
+        PromptTemplate: The constructed prompt template for SELECT query generation with a WHERE clause.
+    """
     prefix = get_cql_code_gen_prefix()
     prompt = (
         prefix
@@ -385,6 +466,14 @@ def build_select_query_with_where() -> PromptTemplate:
 def build_select_query_with_where_parallelizable(
     table_schema: TableSchema,
 ) -> PromptTemplate:
+    """
+    Develops a parallelizable prompt template for generating a SELECT query with a WHERE clause, given a table schema and property information.
+    This prompt focuses on constructing a query that filters data based on properties matching user information, tailored to the specific table schema.
+    Parameters:
+        table_schema (TableSchema): The schema of the table for query generation.
+    Returns:
+        PromptTemplate: The constructed prompt template for parallelizable SELECT query generation with a WHERE clause.
+    """
     prefix = get_cql_code_gen_prefix()
     prompt = (
         prefix
@@ -418,6 +507,12 @@ def build_select_query_with_where_parallelizable(
 
 
 def build_select_query_with_where_v2() -> PromptTemplate:
+    """
+    Constructs a prompt for generating a SELECT query with a WHERE clause using table schema, example rows, and user info.
+    This prompt helps create a CQL query that utilizes user-related property values in WHERE clauses for more relevant data retrieval.
+    Returns:
+        PromptTemplate: The prompt template for SELECT query generation with WHERE clauses.
+    """
     prefix = get_cql_code_gen_prefix()
     prompt = (
         prefix
@@ -451,6 +546,12 @@ def build_select_query_with_where_v2() -> PromptTemplate:
 
 
 def build_select_query_with_where_one_variable() -> PromptTemplate:
+    """
+    Builds a prompt for generating a SELECT query with a WHERE clause based on a table schema and specific user info.
+    This prompt focuses on creating a CQL query where user information is matched with table column names in the WHERE clause.
+    Returns:
+        PromptTemplate: The prompt template for SELECT query generation with a specific WHERE clause.
+    """
     prefix = get_cql_code_gen_prefix()
     prompt = (
         prefix
@@ -474,6 +575,12 @@ Never use execution_counter or anything from the failure reasons in the actual q
 
 
 def determine_failure_type() -> PromptTemplate:
+    """
+    Creates a prompt to categorize the type of error encountered in a failed query.
+    This prompt helps identify if the failure was due to token count exceeded, syntax error, or other reasons.
+    Returns:
+        PromptTemplate: The prompt template for error categorization.
+    """
     prefix = get_helpful_assistant_prefix()
     prompt = (
         prefix
@@ -494,6 +601,12 @@ def determine_failure_type() -> PromptTemplate:
 
 
 def rewrite_query_based_on_error() -> PromptTemplate:
+    """
+    Develops a prompt for rewriting a CQL query based on provided error information.
+    This prompt assists in correcting and improving a previously failed query by addressing the identified issues.
+    Returns:
+        PromptTemplate: The prompt template for rewriting a failed query.
+    """
     prefix = get_helpful_assistant_prefix()
     prompt = (
         prefix
@@ -511,6 +624,12 @@ from a table other than the intended one.
 
 
 def build_select_query_where_user_property_matches_column_name() -> PromptTemplate:
+    """
+    Constructs a prompt to determine if any table column name matches user info property names.
+    This prompt is used to identify if a table schema is relevant to the user by matching column names with user properties.
+    Returns:
+        PromptTemplate: The prompt template for matching user properties with table column names.
+    """
     prefix = get_helpful_assistant_prefix()
     prompt = (
         prefix
@@ -530,10 +649,26 @@ def build_select_query_where_user_property_matches_column_name() -> PromptTempla
 
 
 def trim_to_first_1000_chars(input_str: str) -> str:
+    """
+    Trims a string to its first 1000 characters.
+    This function is useful for reducing lengthy strings to a manageable size.
+    Parameters:
+        input_str (str): The string to be trimmed.
+    Returns:
+        str: The trimmed string.
+    """
     return input_str[:1000]
 
 
-def clean_string_v2(s: str):
+def clean_string_v2(s: str) -> str:
+    """
+    Cleans a given string by removing backticks, trimming whitespace, and excluding lines containing only 'sql', 'json', or 'cql'.
+    This function prepares strings for processing by removing unnecessary elements.
+    Parameters:
+        s (str): The string to be cleaned.
+    Returns:
+        str: The cleaned string.
+    """
     # Removing backticks and trimming whitespace
     s = s.strip("`' ")
 
@@ -550,6 +685,12 @@ def clean_string_v2(s: str):
 
 
 def get_chain_to_determine_if_table_might_be_relevant_to_user() -> PromptTemplate:
+    """
+    Creates a prompt template to determine if a table might be relevant to a user based on table schema and user information.
+    This prompt assesses the relevance of a table to a user by checking for matches between user properties and table column names.
+    Returns:
+        PromptTemplate: The prompt template for assessing table relevance to a user.
+    """
     prefix = get_helpful_assistant_prefix()
     prompt = (
         prefix
@@ -565,82 +706,3 @@ def get_chain_to_determine_if_table_might_be_relevant_to_user() -> PromptTemplat
 """
     )
     return PromptTemplate.from_template(prompt)
-
-
-# def buildChain(self, table_schema: TableSchema, user_info: UserInfo, data_access: DataAccess):
-#     model = ChatOpenAI(model_name="gpt-4-1106-preview")
-#
-#     # Need to build TableExecutionInfo from schema for first run
-#     exec_info = TableExecutionInfo(table_schema=table_schema, rows=None, prior_failures=None)
-#
-#     top3_chain = (
-#         {"TableSchema": itemgetter("table_schema")}
-#         | self.build_select_query_for_top_three_rows()
-#         | model
-#         | StrOutputParser()
-#     )
-#     top3_query = top3_chain.invoke({"table_schema": table_schema})
-#     try:
-#         top3_rows = data_access.exec_cql_query("example_namespace", top3_query)
-#         exec_info.rows = top3_rows
-#     except Exception as ex:
-#         logging.error("failure") # Just log the failure for now. Later, we can recursively
-#         exec_info.prior_failures.append(ExecutionFailure(top3_query, ex))
-#         NotImplementedError()
-#
-#
-#     select_with_where_chain = (
-#         {"TableExecutionInfo": itemgetter("exec_info"), "PropertyInfo": itemgetter("user_info")}
-#         | self.build_select_query_with_where()
-#         | model
-#         | StrOutputParser
-#     )
-#     select_with_where_statement = select_with_where_chain.invoke({"exec_info":exec_info, "user_info": user_info })
-#     # Exec the select statement
-#     try:
-#         all_rows: List[dict] = data_access.exec_cql_query("example_namespace", select_with_where_statement)
-#         exec_info.rows = all_rows
-#     except Exception as ex:
-#         logging.error("failure") # Just log the failure for now. Later, we can recursively
-#         exec_info.prior_failures.append(ExecutionFailure(top3_query, ex))
-#         NotImplementedError()
-#     exec_info = TableExecutionInfo(
-#         table_schema=table_schema, rows=all_rows, prior_failures=None
-#     )
-#     select_with_where_chain2 = (
-#         {"TableExecutionInfo": exec_info | increment_counter, "PropertyInfo": user_info}
-#         | self.build_select_query_with_where()
-#         | model
-#         | StrOutputParser
-#     )
-#
-#     # When handling errors, we could have the LLM increment a counter and emit JSON in the response.
-#     # Then, we can use JsonKeyOutputFunctionsParser(key_name="mykey") to grab the value from one of the JSON object keys.
-#    # func_to_exec_query = ?
-#     trim_to_first_1000_chars()
-#     smart_select_prompt: PromptTemplate = self.build_select_query_with_where()
-#     branch = RunnableBranch(
-#         (lambda x: "YES" in x["topic"].lower(), get_chain_to_query_),
-#         (lambda x: "NO" in x["topic"].lower(), langchain_chain),
-#         determine_if_any_table_columns_match_a_user_property_name(),
-#     )
-#
-#     full_chain.invoke(
-#         {
-#             "TableSchema": table_schema.to_lcel_json_prefixed(),
-#             "UserInfo": user_info.to_lcel_json_prefixed(),
-#         }
-#     )
-
-
-def create_synopsis_prompt(title):
-    prefix = get_python_code_gen_prefix()
-    prompt = PromptTemplate.from_template(
-        f"""{prefix}
-        I will give you some examples from docs: 
-
-EXAMPLES:
-
-{title}
-Playwright: This is a synopsis for the above play:"""
-    )
