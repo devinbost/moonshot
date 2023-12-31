@@ -1,5 +1,6 @@
+import json
 from operator import itemgetter
-from typing import List
+from typing import List, Dict, Any
 
 from langchain_community.chat_models import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
@@ -20,13 +21,13 @@ class ChainFactory:
     def build_summarization_chain(
         model: ChatOpenAI, data_access: DataAccess, table_schema: TableSchema
     ):
-        def test_func(testme):
+        def test_func(testme: Dict[str, Any]) -> Any:
             print(testme)
             print(table_schema)
             user_props = testme["user_info_not_summary"]
             return user_props
 
-        top3_chain = (
+        top3_chain: Runnable = (
             PromptFactory.build_select_query_for_top_three_rows_parallelizable(
                 table_schema
             )
@@ -35,7 +36,7 @@ class ChainFactory:
             | RunnableLambda(PromptFactory.clean_string_v2)
             | RunnableLambda(data_access.exec_cql_query_simple)
         )
-        select_with_where_chain = (
+        select_with_where_chain: Runnable = (
             {
                 "Top3Rows": top3_chain,
                 "PropertyInfo": test_func,  # Should be user properties of some kind
@@ -46,7 +47,7 @@ class ChainFactory:
             | RunnableLambda(PromptFactory.clean_string_v2)
             | RunnableLambda(data_access.exec_cql_query_simple)
         )
-        table_summarization_chain = (
+        table_summarization_chain: Runnable = (
             {"Information": select_with_where_chain}
             | PromptFactory.build_summarization_prompt()
             | model
@@ -180,24 +181,41 @@ class ChainFactory:
         return path_segment_keyword_chain
 
     def build_collection_predicate_chain_non_parallel_v2(
-        self, model: ChatOpenAI, table_summarization, all_keywords: dict
+        self,
+        model: ChatOpenAI,
+        table_summarization: str,
+        all_keywords: Dict[str, List[str]],
     ):
         """
         Returns list of filters like this: [{{"metadata.path_segment_X": "VALUE"}}]
         """
+        all_keywords_string: str = json.dumps(all_keywords)
+        # print("All Keywords String:", all_keywords_string)
+        # print("Table Summarization:", table_summarization)
+
+        path_segment_values_lambda = RunnableLambda(lambda x: all_keywords_string)
+        user_information_summary_lambda = RunnableLambda(lambda x: table_summarization)
+
+        # print("Path Segment Values Lambda:", path_segment_values_lambda)
+        # print("User Information Summary Lambda:", user_information_summary_lambda)
+        #
+        # prompt_factory_result = PromptFactory.build_collection_vector_find_prompt_v2()
+        # print("Prompt Factory Result:", prompt_factory_result)
         path_segment_keyword_chain = (
             {
-                "PathSegmentValues": RunnableLambda(lambda x: all_keywords),
-                "UserInformationSummary": RunnableLambda(lambda x: table_summarization),
+                "PathSegmentValues": path_segment_values_lambda,
+                "UserInformationSummary": user_information_summary_lambda,
             }
             | PromptFactory.build_collection_vector_find_prompt_v2()
             | model
             | StrOutputParser()
             | RunnableLambda(PromptFactory.clean_string_v2)
         )
-        return path_segment_keyword_chain
+        return path_segment_keyword_chain  # Check type. Needs to be Dict[str, str]
 
-    def build_vector_search_summarization_chain(self, model, search_results):
+    def build_vector_search_summarization_chain(
+        self, model, search_results: str
+    ) -> Runnable:
         collection_summary_chain = (
             {"Information": RunnableLambda(lambda x: search_results)}
             | PromptFactory.build_summarization_prompt()

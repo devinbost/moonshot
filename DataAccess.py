@@ -17,6 +17,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Cassandra
 import wget
 import pandas as pd
+from pandas._typing import ArrayLike
 from sentence_transformers import SentenceTransformer
 from langchain.docstore.document import Document
 import ClassInspector
@@ -621,7 +622,7 @@ RESULTS:"""
             )
             for obj in data
         ]
-        populated = [
+        populated: List[TableSchema] = [
             self.set_table_metadata_and_return(table) for table in table_schemas
         ]
         return populated
@@ -670,7 +671,7 @@ RESULTS:"""
         table_schema.columns = columns
         return table_schema
 
-    def get_path_segment_keywords(self):
+    def get_path_segment_keywords(self) -> Dict[str, List[str]]:
         query = SimpleStatement(
             f"""SELECT query_text_values['metadata.subdomain'] as subdomain,
          query_text_values['metadata.path_segment_1'] as seg1,
@@ -690,13 +691,13 @@ RESULTS:"""
 
         # Convert results to a DataFrame
         df = pd.DataFrame(results)
-        distinct_seg1 = df["seg1"].unique()
+        distinct_seg1 = df["seg1"].unique().tolist()
         filtered_df = df[~df["seg2"].str.contains("knowledge-base", na=False)]
-        distinct_seg2 = filtered_df["seg2"].unique()
-        distinct_seg3 = df["seg3"].unique()
-        distinct_seg4 = df["seg4"].unique()
-        distinct_seg5 = df["seg5"].unique()
-        distinct_seg6 = df["seg6"].unique()
+        distinct_seg2 = filtered_df["seg2"].unique().tolist()
+        distinct_seg3 = df["seg3"].unique().tolist()
+        distinct_seg4 = df["seg4"].unique().tolist()
+        distinct_seg5 = df["seg5"].unique().tolist()
+        distinct_seg6 = df["seg6"].unique().tolist()
         distinct_values_dict = {
             "seg1": distinct_seg1,
             "seg2": distinct_seg2,
@@ -708,19 +709,22 @@ RESULTS:"""
         return distinct_values_dict
 
     def filtered_ANN_search(
-        self, collection_filter: dict[str, str], user_summary
-    ) -> list[dict[str, Any]]:
+        self, collection_filter: Dict[str, str], user_summary: Any
+    ) -> str:
         user_summary_string = json.dumps(user_summary)
-        input_vector = self.embedding_direct.encode(user_summary_string).tolist()
+        input_vector: List[float] = self.embedding_direct.encode(
+            user_summary_string
+        ).tolist()
         collection = AstraDBCollection(
             collection_name="sitemapls", astra_db=self.astrapy_db
         )
-        results = collection.vector_find(
+        results: List[Dict[str, Any]] = collection.vector_find(
             vector=input_vector,
             filter=collection_filter,
             limit=100,
         )
-        return results
+        results_as_string = json.dumps(results)
+        return results_as_string
 
     def filtered_ANN_search_maker(
         self, user_summary: dict[str, str]

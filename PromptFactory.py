@@ -56,7 +56,7 @@ def build_filter_and_summary_joiner_prompt():
 
 
 def build_table_identification_prompt():
-    prompt = (
+    prompt: str = (
         get_helpful_assistant_prefix()
         + """You are also a great Cassandra database engineer. Your goal is to identify tables that likely contain 
         information that will be relevant for a user (whom I will describe below) so that we can take additional 
@@ -199,6 +199,7 @@ def build_collection_vector_find_prompt_v2() -> PromptTemplate:
         {UserInformationSummary}
         """
     )
+    return PromptTemplate.from_template(prompt)
 
 
 def get_relevant_user_tables(tables: list[TableSchema], user_info: UserInfo):

@@ -809,9 +809,10 @@ class TestChains(unittest.TestCase):
                 )
                 summarization_of_topic = summarization_of_topic_chain.invoke({})
                 topic_summaries_for_table.append(summarization_of_topic)
+            topic_summaries_for_table_as_str = json.dumps(topic_summaries_for_table)
             summarization_of_findings_for_table = (
                 factory.build_vector_search_summarization_chain(
-                    model, topic_summaries_for_table
+                    model, topic_summaries_for_table_as_str
                 )
             )
             insights_on_table = summarization_of_findings_for_table.invoke({})
@@ -868,7 +869,7 @@ class TestChains(unittest.TestCase):
                 ),
             ]
         )
-        relevant_table_chain: Dict[str, Runnable] = (
+        relevant_table_chain: Runnable = (
             {
                 "TableList": RunnableLambda(
                     fake_data_access.get_table_schemas_in_db_v2
@@ -881,7 +882,7 @@ class TestChains(unittest.TestCase):
             | RunnableLambda(PromptFactory.clean_string_v2)
             | RunnableLambda(fake_data_access.map_tables_and_populate)
         )
-        relevant_tables: List[str] = relevant_table_chain.invoke(
+        relevant_tables: List[TableSchema] = relevant_table_chain.invoke(
             {"user_info_not_summary": user_info}
         )
         factory: ChainFactory = ChainFactory()
@@ -898,17 +899,17 @@ class TestChains(unittest.TestCase):
             )
             all_user_table_summaries.append(table_summarization)
 
-            predicate_idenfication_chain: Runnable = (
+            predicate_identification_chain: Runnable = (
                 factory.build_collection_predicate_chain_non_parallel_v2(
                     model, table_summarization, all_collection_keywords
                 )
             )
-            collection_predicates: List[str] = predicate_idenfication_chain.invoke({})
+            collection_predicates: List[str] = predicate_identification_chain.invoke({})
             topic_summaries_for_table: List[str] = []
             for predicate in collection_predicates:
-                search_results_for_topic: List[
-                    str
-                ] = fake_data_access.filtered_ANN_search(predicate, table_summarization)
+                search_results_for_topic: str = fake_data_access.filtered_ANN_search(
+                    predicate, table_summarization
+                )
                 summarization_of_topic_chain: Runnable = (
                     factory.build_vector_search_summarization_chain(
                         model, search_results_for_topic
@@ -916,9 +917,12 @@ class TestChains(unittest.TestCase):
                 )
                 summarization_of_topic: str = summarization_of_topic_chain.invoke({})
                 topic_summaries_for_table.append(summarization_of_topic)
+            topic_summaries_for_table_as_string: str = json.dumps(
+                topic_summaries_for_table
+            )
             summarization_of_findings_for_table: Runnable = (
                 factory.build_vector_search_summarization_chain(
-                    model, topic_summaries_for_table
+                    model, topic_summaries_for_table_as_string
                 )
             )
             insights_on_table: str = summarization_of_findings_for_table.invoke({})
