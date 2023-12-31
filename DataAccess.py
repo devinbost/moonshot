@@ -692,19 +692,22 @@ RESULTS:"""
         # Convert results to a DataFrame
         df = pd.DataFrame(results)
         distinct_seg1 = df["seg1"].unique().tolist()
-        filtered_df = df[~df["seg2"].str.contains("knowledge-base", na=False)]
+        filtered_df = df[
+            ~df["seg2"].str.contains("knowledge-base", na=False)
+            & ~df["seg2"].str.contains("legal", na=False)
+        ]
         distinct_seg2 = filtered_df["seg2"].unique().tolist()
         distinct_seg3 = df["seg3"].unique().tolist()
         distinct_seg4 = df["seg4"].unique().tolist()
         distinct_seg5 = df["seg5"].unique().tolist()
         distinct_seg6 = df["seg6"].unique().tolist()
         distinct_values_dict = {
-            "seg1": distinct_seg1,
-            "seg2": distinct_seg2,
-            "seg3": distinct_seg3,
-            "seg4": distinct_seg4,
-            "seg5": distinct_seg5,
-            "seg6": distinct_seg6,
+            "metadata.path_segment_1": distinct_seg1,
+            "metadata.path_segment_2": distinct_seg2,
+            "metadata.path_segment_3": distinct_seg3,
+            "metadata.path_segment_4": distinct_seg4,
+            "metadata.path_segment_5": distinct_seg5,
+            "metadata.path_segment_6": distinct_seg6,
         }
         return distinct_values_dict
 
@@ -721,7 +724,7 @@ RESULTS:"""
         results: List[Dict[str, Any]] = collection.vector_find(
             vector=input_vector,
             filter=collection_filter,
-            limit=100,
+            limit=20,
         )
         results_as_string = json.dumps(results)
         return results_as_string

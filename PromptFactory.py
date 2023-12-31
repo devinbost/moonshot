@@ -85,7 +85,9 @@ def build_table_identification_prompt():
 def build_final_response_prompt() -> PromptTemplate:
     prompt = (
         get_personal_response_prefix()
-        + """"You will be given a rich set of summaries of basically everything we know about this customer, 
+        + """"You are responsible for representing the business to the customer for both sales and customer support purposes. 
+        Your ability to address the user's intent is critical to the success of our business.
+        You will be given a rich set of summaries of basically everything we know about this customer, 
         and then you will be given a second set of summaries with a lot of information that is likely relevant to 
         their needs based on a previously run search algorithm that we ran internally on their information. Your job 
         is to use this information to make the best possible recommendation to the customer. The recommendation 
@@ -93,7 +95,8 @@ def build_final_response_prompt() -> PromptTemplate:
         Recommend what is best for the customer, but if it's good for the business also, that's a double win.
         You will also be provided (at the end) with the customer's most recent messages, ordered from oldest to most recent.
         Be sure that your recommendation to them is relevant to their messages, especially their most recent message.
-        
+        Always do what is in the customer's best interest.
+        Also, don't provide a message signature. 
         
         USER SUMMARIES:
         {UserSummary}
@@ -169,34 +172,43 @@ def build_collection_vector_find_prompt() -> PromptTemplate:
 def build_collection_vector_find_prompt_v2() -> PromptTemplate:
     prompt = (
         get_helpful_assistant_prefix()
-        + """ Based on the provided summary
+        + """ I will give you 6 lists of keywords and information about a customer. I want you to use the information to create a list of JSON objects. These JSON objects will be used in a later step to construct queries that will be used to find articles with information that should help the customer. 
+        It is critical that the keywords match the customer's intent so that we can retrieve articles that will resonate with the customer. 
+        If the keywords don't relate to the customer's information, then it will be very bad because you will cause the customer to receive information that won't relate to them and could upset or offend them.
+        You must follow these rules that apply to each JSON object in the list:
+1. The JSON object will contain a single key and a single value. 
+2. The key will be one of the following values: "metadata.path_segment_1", "metadata.path_segment_2", "metadata.path_segment_3", "metadata.path_segment_4", "metadata.path_segment_5", "metadata.path_segment_6"
+3. The value of the JSON object MUST exist in the corresponding list that I will provide below. For example, if the value "how-to-use-a-verizon-jetpack" exists in the list for keywords of "metadata.path_segment_3", you may use "how-to-use-a-verizon-jetpack" as the value for the JSON object if and only if:
+    a. The key is "metadata.path_segment_3"
+    b. The value (in this case "how-to-use-a-verizon-jetpack") is strongly associated with at least some of the content of the USER INFORMATION SUMMARY below.
+    c. There is not another keyword from the "metadata.path_segment_3" list that is a better match to some of the USER INFORMATION SUMMARY.
+    d. The value (in this case "how-to-use-a-verizon-jetpack") does not exist more than once in the JSON list you provide.
+    e. If you're not sure, it's much better to use a more generic keyword like something related to "promos" or "promotions"
+4. The JSON list should contain at least 5 distinct objects.
+5. The JSON list should NEVER contain more than 20 objects.
+6. The JSON list MUST never contain 0 objects.
+7. You should always select the most specific matches available. For example, if the USER INFORMATION SUMMARY mentions an "iPhone 13", if the keyword "iPhone 13" is available (in one of the keyword lists), you should prefer the more specific ("iPhone 13" in this case) over "iPhone" or "phone". 
+8. You should NEVER create a JSON object using a value that doesn't exist in the available keywords. 
+9. You should NEVER create a JSON object using a value that is strongly unrelated to any content in the USER INFORMATION SUMMARY.
+10. You must NEVER return anything other than a list of JSON objects.
+11. Pay careful attention to which keywords are part of which list to ensure you don't try to use a keyword as a value for a key to which it does not belong.
 
-        Generate a JSON object containing one or more of the following keys: seg_1, 
-        seg_2, seg_3, seg_4, seg_5, 
-        seg_6 Based on the following VECTOR DATA, I want you to determine which values of those 
-        metadata path segment keys are most likely to be associated with the USER INFORMATION below. Each path 
-        segment is more specific than the one prior to it. Use the most granular seg that makes sense. Avoid 
-        using more than one filter but always use at least one. Once you select a filter, I want you to return the 
-        information in a list of JSON objects with the following example syntax: [{{"seg_X": "VALUE"}}] where X 
-        is the selected path segment value, and VALUE is the value you've chosen based on the PATH SEGMENT VALUES 
-        available below. Only select values from the PATH SEGMENT VALUES below. Don't create any other path segment 
-        values. Also, ensure that the path segment value you selected corresponds to the correct seg number. 
-        For example, if the data below shows that 'residential' is associated with seg_2, don't use 
-        'residential' as a path segment value for any path other than seg_2. 
-
-        I want you to construct at least 10 (but less than 20) such JSON objects, and they should cover different subjects associated with the provided USER INFORMATION SUMMARY below.
-        Select matches that are as specific as possible. Prefer finding matches to columns in this order of preference (from best to worst):
-        seg_6, seg_5, seg_4, seg_3, seg_2, seg_1
-
-        Return ONLY this list of JSON objects."""
+Here is the USER INFORMATION SUMMARY. I will repeat it again at the end. Remember to only find keywords that strongly relate to information in the USER INFORMATION SUMMARY.
+For example, if the user is asking for support, select support-related keywords, not security-related keywords. If the user is interested in upgrading, don't bring up keywords about firewalls. Bring up promotional keywords instead.
+"""
         + """
-        PATH SEGMENT VALUES:
+USER INFORMATION SUMMARY:
 
-        {PathSegmentValues}
+{UserInformationSummary}
 
-        USER INFORMATION SUMMARY:
 
-        {UserInformationSummary}
+AVAILABLE KEYWORDS:
+
+{PathSegmentValues}
+
+USER INFORMATION SUMMARY:
+
+{UserInformationSummary}
         """
     )
     return PromptTemplate.from_template(prompt)

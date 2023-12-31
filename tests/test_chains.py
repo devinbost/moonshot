@@ -1,7 +1,7 @@
 import json
 from operator import itemgetter
 from typing import List, Dict
-
+import logging
 from langchain.chat_models import ChatOpenAI
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.prompts import ChatPromptTemplate
@@ -891,12 +891,16 @@ class TestChains(unittest.TestCase):
         all_collection_keywords: Dict = fake_data_access.get_path_segment_keywords()
         all_table_insights: List[str] = []
         for table in relevant_tables:
+            print(f"Found relevant table: {table}")
+            logging.info(f"Found relevant table: {table}")
             table_summarization_chain: Runnable = factory.build_summarization_chain(
                 model, fake_data_access, table
             )
             table_summarization: str = table_summarization_chain.invoke(
                 {"user_info_not_summary": user_info}
             )
+            print(f"Here is the table summary: {table_summarization}")
+            logging.info(f"Here is the table summary: {table_summarization}")
             all_user_table_summaries.append(table_summarization)
 
             predicate_identification_chain: Runnable = (
@@ -904,11 +908,21 @@ class TestChains(unittest.TestCase):
                     model, table_summarization, all_collection_keywords
                 )
             )
-            collection_predicates: List[str] = predicate_identification_chain.invoke({})
+            collection_predicates: str = predicate_identification_chain.invoke({})
             topic_summaries_for_table: List[str] = []
+            print(f"Collection predicates are: {collection_predicates}")
+            logging.info(f"Collection predicates are: {collection_predicates}")
             for predicate in collection_predicates:
+                print(f"Topic is: {predicate}")
+                logging.info(f"Topic is: {predicate}")
                 search_results_for_topic: str = fake_data_access.filtered_ANN_search(
                     predicate, table_summarization
+                )
+                print(
+                    f"Here were search results for that topic: {search_results_for_topic}"
+                )
+                logging.info(
+                    f"Here were search results for that topic: {search_results_for_topic}"
                 )
                 summarization_of_topic_chain: Runnable = (
                     factory.build_vector_search_summarization_chain(
@@ -916,6 +930,10 @@ class TestChains(unittest.TestCase):
                     )
                 )
                 summarization_of_topic: str = summarization_of_topic_chain.invoke({})
+                print(f"Here is the summary for the topic: {summarization_of_topic}")
+                logging.info(
+                    f"Here is the summary for the topic: {summarization_of_topic}"
+                )
                 topic_summaries_for_table.append(summarization_of_topic)
             topic_summaries_for_table_as_string: str = json.dumps(
                 topic_summaries_for_table
@@ -926,6 +944,12 @@ class TestChains(unittest.TestCase):
                 )
             )
             insights_on_table: str = summarization_of_findings_for_table.invoke({})
+            print(
+                f"Here is the full summarization for the table across its topics: {insights_on_table}"
+            )
+            logging.info(
+                f"Here is the full summarization for the table across its topics: {insights_on_table}"
+            )
             all_table_insights.append(insights_on_table)
 
         recommendation_chain: Runnable = (
@@ -938,3 +962,6 @@ class TestChains(unittest.TestCase):
                 "user_messages": ["Hi, I'm having trouble with my phone network"],
             }
         )
+
+        print(f"Recommendation to the user is: {recommendation}")
+        logging.info(f"Recommendation to the user is: {recommendation}")

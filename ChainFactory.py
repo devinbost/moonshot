@@ -210,8 +210,9 @@ class ChainFactory:
             | model
             | StrOutputParser()
             | RunnableLambda(PromptFactory.clean_string_v2)
+            | RunnableLambda(lambda x: json.loads(x))
         )
-        return path_segment_keyword_chain  # Check type. Needs to be Dict[str, str]
+        return path_segment_keyword_chain
 
     def build_vector_search_summarization_chain(
         self, model, search_results: str
