@@ -333,7 +333,8 @@ class ChainFactory:
             {
                 "UserSummary": user_summarization_chain_parallelizable,
                 "BusinessSummary": collection_summarization_chain_parallelizable,
-                "UserMessages": itemgetter("user_messages")
+                "UserMessages": itemgetter("user_messages"),
+                "OurResponses": itemgetter("our_responses")
                 | RunnableLambda(lambda x: x.reverse()),
             }
             | PromptFactory.build_final_response_prompt()
@@ -350,7 +351,8 @@ class ChainFactory:
             {
                 "UserSummary": itemgetter("user_summary"),
                 "BusinessSummary": itemgetter("business_summary"),
-                "UserMessages": itemgetter("user_messages")
+                "UserMessages": itemgetter("user_messages"),
+                "OurResponses": itemgetter("our_responses")
                 | RunnableLambda(lambda x: x.reverse()),
             }
             | PromptFactory.build_final_response_prompt()

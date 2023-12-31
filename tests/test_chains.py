@@ -595,7 +595,9 @@ class TestChains(unittest.TestCase):
         # and wrap in a prompt that instructs the user with a recommendation
 
         message_list = ["Hi, I'm having trouble with my phone network"]
-        final_output = final_chain.invoke({"user_messages": message_list})
+        final_output = final_chain.invoke(
+            {"user_messages": message_list, "our_responses": [""]}
+        )
         print(final_output)
 
     def test_entire_chain_non_parallel(self):
@@ -714,6 +716,7 @@ class TestChains(unittest.TestCase):
                 "user_summary": table_summarization_chain_results,
                 "business_summary": collection_summary_chain_result_list,
                 "user_messages": ["Hi, I'm having trouble with my phone network"],
+                "our_responses": [""],
             }
         )
 
@@ -960,6 +963,7 @@ class TestChains(unittest.TestCase):
                 "user_summary": all_user_table_summaries,
                 "business_summary": all_table_insights,
                 "user_messages": ["Hi, I'm having trouble with my phone network"],
+                "our_responses": [""],
             }
         )
 

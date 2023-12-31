@@ -134,7 +134,7 @@ def add_element(
     return form_data
 
 
-def buildInputs(data_access, col1):
+def build_reflection_menu(data_access, col1):
     # action_type = col1.selectbox("Action type", ("import", "env", "secret"))
     library = col1.selectbox(
         "Import path",
@@ -229,15 +229,9 @@ def buildInputs(data_access, col1):
 
 def render(data_access: DataAccess, app_name, chatbot: Chatbot, crawler):
     col1, col2, col3 = st.columns(3)
-    buildInputs(data_access, col1)
-
-    # Build graph from data structure here:
-    graph = Digraph(comment="Component Graph")
-    data_map = data_access.get_data_map()
-    updated_graph = data_access.build_graph(data_map, graph)
-    col2.graphviz_chart(updated_graph)
-    python_code = data_access.generate_python_code()
-    col2.markdown(python_code)
+    if col1.checkbox("Preview Mode?", value=False):
+        build_reflection_menu(data_access, col1)
+        build_graph_display(col2, data_access)
     print("Running render")
     col3.title(app_name)
 
@@ -286,7 +280,7 @@ def render(data_access: DataAccess, app_name, chatbot: Chatbot, crawler):
     sitemaps = col3.text_input(
         "Sitemap URLs to crawl as csv"
     )  # To do: Handle this input better
-    table_name = col3.text_input("Table to store data")
+    table_name = col3.text_input("Collection to store data")
     if col3.button("Crawl docs"):
         progress_bar = col3.progress(0, "Percentage completion of site crawling")
         start = time.time()
@@ -296,6 +290,16 @@ def render(data_access: DataAccess, app_name, chatbot: Chatbot, crawler):
         end = time.time()
         completion_time = end - start  # Time elapsed in seconds
         col3.caption(f"Completed parsing docs in {completion_time} seconds")
+
+
+def build_graph_display(col2, data_access):
+    # Build graph from data structure here:
+    graph = Digraph(comment="Component Graph")
+    data_map = data_access.get_data_map()
+    updated_graph = data_access.build_graph(data_map, graph)
+    col2.graphviz_chart(updated_graph)
+    python_code = data_access.generate_python_code()
+    col2.markdown(python_code)
 
 
 def get_sitemap_list_from_csv(sitemaps):

@@ -96,7 +96,7 @@ def build_final_response_prompt() -> PromptTemplate:
         You will also be provided (at the end) with the customer's most recent messages, ordered from oldest to most recent.
         Be sure that your recommendation to them is relevant to their messages, especially their most recent message.
         Always do what is in the customer's best interest.
-        Also, don't provide a message signature. 
+        Also, don't provide a message signature, and don't say anything that we already said to the customer.
         
         USER SUMMARIES:
         {UserSummary}
@@ -110,6 +110,11 @@ def build_final_response_prompt() -> PromptTemplate:
         
         USER MESSAGES:
         {UserMessages}
+        
+        
+        
+        OUR PRIOR RESPONSES:
+        {OurResponses}
         """
     )
     return PromptTemplate.from_template(prompt)
