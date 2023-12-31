@@ -702,7 +702,6 @@ RESULTS:"""
         distinct_seg5 = df["seg5"].unique().tolist()
         distinct_seg6 = df["seg6"].unique().tolist()
         distinct_values_dict = {
-            "metadata.path_segment_1": distinct_seg1,
             "metadata.path_segment_2": distinct_seg2,
             "metadata.path_segment_3": distinct_seg3,
             "metadata.path_segment_4": distinct_seg4,
@@ -724,7 +723,7 @@ RESULTS:"""
         results: List[Dict[str, Any]] = collection.vector_find(
             vector=input_vector,
             filter=collection_filter,
-            limit=20,
+            limit=10,
         )
         results_as_string = json.dumps(results)
         return results_as_string

@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime
 from operator import itemgetter
 from typing import List, Dict
 
@@ -33,6 +34,9 @@ from pydantic_models.UserInfo import UserInfo
 class Chatbot:
     # Need to refactor this class at some point to support multiple LLM providers
     def __init__(self, data_access: DataAccess):
+        self.our_responses = [""]
+        self.column = None
+        self.user_messages = [""]
         print("ran __init__ on Chatbot")
         self.chat_history = []
         self.memory = ConversationBufferMemory(
@@ -122,47 +126,20 @@ class Chatbot:
         # We may want to also capture bot_response["source_documents"] for analytics later
         return bot_response
 
-    def answer_customer(self):
+    def log_response(self, bot_message: str):
+        print(bot_message)
+        logging.info(bot_message)
+        self.column.text_area(
+            "Bot Log Entry",
+            value=bot_message,
+            key=datetime.utcnow().strftime("%Y%m%d%H%M%S%f"),
+        )
+
+    def answer_customer(self, user_message: str, user_info: UserInfo, column):
+        self.column = column
         fake_data_access: DataAccess = DataAccess()
         model: ChatOpenAI = ChatOpenAI(model_name="gpt-4-1106-preview")
-        # Faking the user_info for now. Will pull from UI & DB later.
-        user_info: UserInfo = UserInfo(
-            properties=[
-                PropertyInfo(
-                    property_name="age", property_type="int", property_value=30
-                ),
-                PropertyInfo(
-                    property_name="name",
-                    property_type="text",
-                    property_value="John Smith",
-                ),
-                PropertyInfo(
-                    property_name="phone_number",
-                    property_type="text",
-                    property_value="555-555-5555",
-                ),
-                PropertyInfo(
-                    property_name="email",
-                    property_type="text",
-                    property_value="johndoe@example.com",
-                ),
-                PropertyInfo(
-                    property_name="address",
-                    property_type="text",
-                    property_value="123 Main St, Anytown, USA",
-                ),
-                PropertyInfo(
-                    property_name="account_status",
-                    property_type="text",
-                    property_value="Active",
-                ),
-                PropertyInfo(
-                    property_name="plan_type",
-                    property_type="text",
-                    property_value="Unlimited Data Plan",
-                ),
-            ]
-        )
+
         relevant_table_chain: Runnable = (
             {
                 "TableList": RunnableLambda(
@@ -185,16 +162,14 @@ class Chatbot:
         all_collection_keywords: Dict = fake_data_access.get_path_segment_keywords()
         all_table_insights: List[str] = []
         for table in relevant_tables:
-            print(f"Found relevant table: {table}")
-            logging.info(f"Found relevant table: {table}")
+            self.log_response(f"Found relevant table: {table}")
             table_summarization_chain: Runnable = factory.build_summarization_chain(
                 model, fake_data_access, table
             )
             table_summarization: str = table_summarization_chain.invoke(
                 {"user_info_not_summary": user_info}
             )
-            print(f"Here is the table summary: {table_summarization}")
-            logging.info(f"Here is the table summary: {table_summarization}")
+            self.log_response(f"Here is the table summary: {table_summarization}")
             all_user_table_summaries.append(table_summarization)
 
             predicate_identification_chain: Runnable = (
@@ -204,18 +179,13 @@ class Chatbot:
             )
             collection_predicates: str = predicate_identification_chain.invoke({})
             topic_summaries_for_table: List[str] = []
-            print(f"Collection predicates are: {collection_predicates}")
-            logging.info(f"Collection predicates are: {collection_predicates}")
+            self.log_response(f"Collection predicates are: {collection_predicates}")
             for predicate in collection_predicates:
-                print(f"Topic is: {predicate}")
-                logging.info(f"Topic is: {predicate}")
+                self.log_response(f"Topic is: {predicate}")
                 search_results_for_topic: str = fake_data_access.filtered_ANN_search(
                     predicate, table_summarization
                 )
-                print(
-                    f"Here were search results for that topic: {search_results_for_topic}"
-                )
-                logging.info(
+                self.log_response(
                     f"Here were search results for that topic: {search_results_for_topic}"
                 )
                 summarization_of_topic_chain: Runnable = (
@@ -224,10 +194,10 @@ class Chatbot:
                     )
                 )
                 summarization_of_topic: str = summarization_of_topic_chain.invoke({})
-                print(f"Here is the summary for the topic: {summarization_of_topic}")
-                logging.info(
+                self.log_response(
                     f"Here is the summary for the topic: {summarization_of_topic}"
                 )
+
                 topic_summaries_for_table.append(summarization_of_topic)
             topic_summaries_for_table_as_string: str = json.dumps(
                 topic_summaries_for_table
@@ -238,10 +208,7 @@ class Chatbot:
                 )
             )
             insights_on_table: str = summarization_of_findings_for_table.invoke({})
-            print(
-                f"Here is the full summarization for the table across its topics: {insights_on_table}"
-            )
-            logging.info(
+            self.log_response(
                 f"Here is the full summarization for the table across its topics: {insights_on_table}"
             )
             all_table_insights.append(insights_on_table)
@@ -249,13 +216,17 @@ class Chatbot:
         recommendation_chain: Runnable = (
             factory.build_final_recommendation_chain_non_parallel(model)
         )
+
         recommendation: str = recommendation_chain.invoke(
             {
                 "user_summary": all_user_table_summaries,
                 "business_summary": all_table_insights,
-                "user_messages": ["Hi, I'm having trouble with my phone network"],
+                "user_messages": [user_message],
+                "our_responses": self.our_responses,
             }
         )
 
-        print(f"Recommendation to the user is: {recommendation}")
-        logging.info(f"Recommendation to the user is: {recommendation}")
+        self.our_responses.append(recommendation)
+
+        self.log_response(f"Recommendation to the user is: {recommendation}")
+        return recommendation

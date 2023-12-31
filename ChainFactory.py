@@ -206,7 +206,7 @@ class ChainFactory:
                 "PathSegmentValues": path_segment_values_lambda,
                 "UserInformationSummary": user_information_summary_lambda,
             }
-            | PromptFactory.build_collection_vector_find_prompt_v2()
+            | PromptFactory.build_collection_vector_find_prompt_v4()
             | model
             | StrOutputParser()
             | RunnableLambda(PromptFactory.clean_string_v2)

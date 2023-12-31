@@ -125,11 +125,14 @@ def build_summarization_prompt() -> PromptTemplate:
         "You're a helpful assistant. I'm will give you some information, and I want you to summarize what I'm "
         "providing you. This information will be used to either summarize something about a customer or "
         "something we know internally that we will use to make a recommendation, so keep that in mind as you "
-        "write the summary. Information that would be obviously irrelevant like UUIDs or numbers without any "
-        "context should be omitted, but technical information that might influence a recommendation or decision "
-        "should be included if it might be applicable. Don't be wordy, but provide enough detail so that patterns can "
+        "write the summary. You want to focus your summary around technical information that might influence a "
+        "recommendation or decision."
+        "Don't be wordy, but provide enough detail so that patterns can "
         "be identified when this summary is combined with others. Any device-specific or plan-specific details should "
-        'be included.)\n If it appears that no information was provided for you to summarize, just say "N/A"'
+        "be included.)\n You want to provide a technical summary that can be used for subsequent steps where the "
+        "information will be assimiliated by a customer support agent to answer a question for a customer. Focus on "
+        "information that might be relevant for a customer. If the information I provide is all blank after I say "
+        '"Here is the information I want you to summarize:", return "skipped"'
         "Here is the information I want you to summarize:"
         ""
         ""
@@ -142,33 +145,118 @@ def build_collection_vector_find_prompt() -> PromptTemplate:
     prompt = (
         get_helpful_assistant_prefix()
         + """ Based on the provided summary
-        
-        Generate a JSON object containing one or more of the following keys: metadata.path_segment_1, 
-        metadata.path_segment_2, metadata.path_segment_3, metadata.path_segment_4, metadata.path_segment_5, 
-        metadata.path_segment_6 Based on the following VECTOR DATA, I want you to determine which values of those 
-        metadata path segment keys are most likely to be associated with the USER INFORMATION below. Each path 
-        segment is more specific than the one prior to it. Use the most granular path_segment that makes sense. Avoid 
-        using more than one filter but always use at least one. Once you select a filter, I want you to return the 
-        information in a list of JSON objects with the following example syntax: [{{"metadata.path_segment_X": "VALUE"}}] where X 
-        is the selected path segment value, and VALUE is the value you've chosen based on the PATH SEGMENT VALUES 
-        available below. Only select values from the PATH SEGMENT VALUES below. Don't create any other path segment 
-        values. Also, ensure that the path segment value you selected corresponds to the correct path_segment number. 
-        For example, if the data below shows that 'residential' is associated with path_segment_2, don't use 
-        'residential' as a path segment value for any path other than path_segment_2. 
-        
-        I want you to construct at least 10 (but less than 20) such JSON objects, and they should cover different subjects associated with the provided USER INFORMATION SUMMARY below.
-        Select matches that are as specific as possible. Prefer finding matches to columns in this order of preference (from best to worst):
-        path_segment_6, path_segment_5, path_segment_4, path_segment_3, path_segment_2, path_segment_1
-        
-        Return ONLY this list of JSON objects."""
+
+Generate a JSON object containing one or more of the following keys: metadata.path_segment_1, 
+metadata.path_segment_2, metadata.path_segment_3, metadata.path_segment_4, metadata.path_segment_5, 
+metadata.path_segment_6 Based on the following VECTOR DATA, I want you to determine which values of those 
+metadata path segment keys are most likely to be associated with the USER INFORMATION below. Each path 
+segment is more specific than the one prior to it. Use the most granular path_segment that makes sense. Avoid 
+using more than one filter but always use at least one. Once you select a filter, I want you to return the 
+information in a list of JSON objects with the following example syntax: [{{"metadata.path_segment_X": "VALUE"}}] where X 
+is the selected path segment value, and VALUE is the value you've chosen based on the PATH SEGMENT VALUES 
+available below. Only select values from the PATH SEGMENT VALUES below. Don't create any other path segment 
+values. Also, ensure that the path segment value you selected corresponds to the correct path_segment number. 
+For example, if the data below shows that 'residential' is associated with path_segment_2, don't use 
+'residential' as a path segment value for any path other than path_segment_2. 
+
+I want you to construct at least 10 (but less than 20) such JSON objects, and they should cover different subjects associated with the provided USER INFORMATION SUMMARY below.
+If you can find at least 3 involving metadata.path_segment_6, 3 involving metadata.path_segment_5, 3 involving metadata.path_segment_4,
+3 involving metadata.path_segment_3, and 3 involving metadata.path_segment_2, that would be good.
+Select matches that are as specific as possible. 
+
+Return ONLY this list of JSON objects."""
         + """
-        PATH SEGMENT VALUES:
-        
-        {PathSegmentValues}
-        
-        USER INFORMATION SUMMARY:
-        
-        {UserInformationSummary}
+PATH SEGMENT VALUES:
+
+{PathSegmentValues}
+
+USER INFORMATION SUMMARY:
+
+{UserInformationSummary}
+        """
+    )
+    return PromptTemplate.from_template(prompt)
+
+
+def build_collection_vector_find_prompt_v3() -> PromptTemplate:
+    prompt = (
+        get_helpful_assistant_prefix()
+        + """
+Based on the provided vector data and user information, generate a list of JSON objects using the most appropriate metadata path segments. The task involves selecting values from the specified path segments, where each path segment represents a level of specificity. You are to use the most granular path segment that applies.
+I will give you 6 lists of keywords and information about a customer. These JSON objects will be used in a later step to construct queries that will be used to find articles with information that should help the customer. 
+It is critical that the keywords match the customer's intent so that we can retrieve articles that will resonate with the customer. 
+If the keywords don't relate to the customer's information, then it will be very bad because you will cause the customer to receive information that won't relate to them and could upset or offend them.
+
+Guidelines:
+- Use at least one path segment for each JSON object, but avoid using more than one.
+- Ensure the path segment value corresponds to the correct path segment number based on the provided lists.
+- Create 10 to 19 JSON objects, covering different subjects related to the user information.
+- Aim for diversity in path segment usage, with at least 3 objects for each path segment from 2 to 6, selecting the most specific matches possible.
+- Ensure the path segment value is strongly associated with at least some of the content of the USER INFORMATION SUMMARY below.
+- Don't use the same path segment value more than once. Prefer the most specific match if there are multiple matches.
+Output Format:
+- The output should be in the form of a list of JSON objects: [{{"metadata.path_segment_X": "VALUE"}}], where X is the path segment number, and VALUE is the selected value.
+
+Example Output:
+[{{"metadata.path_segment_3": "how-to-use-a-verizon-jetpack"}}, {{"metadata.path_segment_2": "verizon-5g-home-router-troubleshooting"}}]
+
+Return ONLY this list of JSON objects."""
+        + """
+================
+PATH SEGMENT VALUES:
+
+{PathSegmentValues}
+================
+USER INFORMATION SUMMARY:
+
+{UserInformationSummary}
+"""
+    )
+    return PromptTemplate.from_template(prompt)
+
+
+def build_collection_vector_find_prompt_v4() -> PromptTemplate:
+    prompt = (
+        get_helpful_assistant_prefix()
+        + """ I will give you 6 lists of keywords and information about a customer. I want you to use the information to create a list of JSON objects. These JSON objects will be used in a later step to construct queries that will be used to find articles with information that should help the customer. 
+        It is critical that the keywords match the customer's intent so that we can retrieve articles that will resonate with the customer. 
+        If the keywords don't relate to the customer's information, then it will be very bad because you will cause the customer to receive information that won't relate to them and could upset or offend them.
+        You must follow these rules that apply to each JSON object in the list:
+- The value of the JSON object MUST exist in the corresponding list that I will provide below. 
+EXAMPLE: if the value "how-to-use-a-verizon-jetpack" exists in the list for keywords of "metadata.path_segment_3", you may use "how-to-use-a-verizon-jetpack" as the value for the JSON object if and only if:
+    -- The path segment key is "metadata.path_segment_3"
+    -- The path segment key (in this case "how-to-use-a-verizon-jetpack") is strongly associated with at least some of the content of the USER INFORMATION SUMMARY below.
+    -- There is not another path segment value from the "metadata.path_segment_3" list that is a better match to some of the USER INFORMATION SUMMARY.
+    -- The value (in this case "how-to-use-a-verizon-jetpack") does not exist more than once in the JSON list you provide.
+ADDITIONAL GUIDELINES:
+- You should always select the most specific matches available. For example, if the USER INFORMATION SUMMARY mentions an "iPhone 13", if the keyword "iPhone 13" is available (in one of the keyword lists), you should prefer the more specific ("iPhone 13" in this case) over "iPhone" or "phone". 
+- You should NEVER create a JSON object using a value that doesn't exist in the available keywords. 
+- You should NEVER create a JSON object using a value that is strongly unrelated to any content in the USER INFORMATION SUMMARY.
+- Pay very careful attention to which keywords (path segment values) are part of which list to ensure you don't try to use a keyword as a value for a key to which it does not belong.
+- Use at least one path segment for each JSON object, but avoid using more than one.
+- Ensure the path segment value corresponds to the correct path segment number based on the provided lists.
+- Create 10 to 19 JSON objects, covering different subjects related to the user information.
+- Aim for diversity in path segment usage, with at least 3 objects for each path segment from 2 to 6, selecting the most specific matches possible.
+- Ensure the path segment value is strongly associated with at least some of the content of the USER INFORMATION SUMMARY below.
+- Don't use the same path segment value more than once. Prefer the most specific match if there are multiple matches.
+- Select at least three from metadata.path_segment_5
+
+Here is the USER INFORMATION SUMMARY. I will repeat it again at the end. Remember to only find keywords that strongly relate to information in the USER INFORMATION SUMMARY.
+For example, if the user is asking for support, select support-related keywords, not security-related keywords. If the user is interested in upgrading, don't bring up keywords about firewalls. Bring up promotional keywords instead.
+"""
+        + """
+USER INFORMATION SUMMARY:
+
+{UserInformationSummary}
+
+
+AVAILABLE KEYWORDS:
+
+{PathSegmentValues}
+
+USER INFORMATION SUMMARY:
+
+{UserInformationSummary}
         """
     )
     return PromptTemplate.from_template(prompt)
@@ -197,6 +285,14 @@ def build_collection_vector_find_prompt_v2() -> PromptTemplate:
 9. You should NEVER create a JSON object using a value that is strongly unrelated to any content in the USER INFORMATION SUMMARY.
 10. You must NEVER return anything other than a list of JSON objects.
 11. Pay careful attention to which keywords are part of which list to ensure you don't try to use a keyword as a value for a key to which it does not belong.
+
+Additional guidelines:
+- Use at least one path segment for each JSON object, but avoid using more than one.
+- Ensure the path segment value corresponds to the correct path segment number based on the provided lists.
+- Create 10 to 19 JSON objects, covering different subjects related to the user information.
+- Aim for diversity in path segment usage, with at least 3 objects for each path segment from 2 to 6, selecting the most specific matches possible.
+- Ensure the path segment value is strongly associated with at least some of the content of the USER INFORMATION SUMMARY below.
+- Don't use the same path segment value more than once. Prefer the most specific match if there are multiple matches.
 
 Here is the USER INFORMATION SUMMARY. I will repeat it again at the end. Remember to only find keywords that strongly relate to information in the USER INFORMATION SUMMARY.
 For example, if the user is asking for support, select support-related keywords, not security-related keywords. If the user is interested in upgrading, don't bring up keywords about firewalls. Bring up promotional keywords instead.
