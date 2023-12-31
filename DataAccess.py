@@ -723,7 +723,7 @@ RESULTS:"""
         results: List[Dict[str, Any]] = collection.vector_find(
             vector=input_vector,
             filter=collection_filter,
-            limit=10,
+            limit=20,
         )
         results_as_string = json.dumps(results)
         return results_as_string

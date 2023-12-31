@@ -218,21 +218,22 @@ USER INFORMATION SUMMARY:
 def build_collection_vector_find_prompt_v4() -> PromptTemplate:
     prompt = (
         get_helpful_assistant_prefix()
-        + """ I will give you 6 lists of keywords and information about a customer. I want you to use the information to create a list of JSON objects. These JSON objects will be used in a later step to construct queries that will be used to find articles with information that should help the customer. 
-        It is critical that the keywords match the customer's intent so that we can retrieve articles that will resonate with the customer. 
-        If the keywords don't relate to the customer's information, then it will be very bad because you will cause the customer to receive information that won't relate to them and could upset or offend them.
-        You must follow these rules that apply to each JSON object in the list:
+        + """ 
+I will give you 6 lists of path segment values and information about a customer. I want you to use the information to create a list of JSON objects. These JSON objects will be used in a later step to construct queries that will be used to find articles with information that should help the customer. 
+It is critical that the path segment values match the customer's intent so that we can retrieve articles that will resonate with the customer. 
+If the path segment values don't relate to the customer's information, then it will be very bad because you will cause the customer to receive information that won't relate to them and could upset or offend them.
+You must follow these rules that apply to each JSON object in the list:
 - The value of the JSON object MUST exist in the corresponding list that I will provide below. 
-EXAMPLE: if the value "how-to-use-a-verizon-jetpack" exists in the list for keywords of "metadata.path_segment_3", you may use "how-to-use-a-verizon-jetpack" as the value for the JSON object if and only if:
+EXAMPLE: if the value "how-to-use-a-verizon-jetpack" exists in the list for path segment values of "metadata.path_segment_3", you may use "how-to-use-a-verizon-jetpack" as the value for the JSON object if and only if:
     -- The path segment key is "metadata.path_segment_3"
     -- The path segment key (in this case "how-to-use-a-verizon-jetpack") is strongly associated with at least some of the content of the USER INFORMATION SUMMARY below.
     -- There is not another path segment value from the "metadata.path_segment_3" list that is a better match to some of the USER INFORMATION SUMMARY.
     -- The value (in this case "how-to-use-a-verizon-jetpack") does not exist more than once in the JSON list you provide.
 ADDITIONAL GUIDELINES:
-- You should always select the most specific matches available. For example, if the USER INFORMATION SUMMARY mentions an "iPhone 13", if the keyword "iPhone 13" is available (in one of the keyword lists), you should prefer the more specific ("iPhone 13" in this case) over "iPhone" or "phone". 
-- You should NEVER create a JSON object using a value that doesn't exist in the available keywords. 
+- You should always select the most specific matches available. For example, if the USER INFORMATION SUMMARY mentions an "iPhone 13", if the path segment value "iPhone 13" is available (in one of the path segment value lists), you should prefer the more specific ("iPhone 13" in this case) over "iPhone" or "phone". 
+- You should NEVER create a JSON object using a value that doesn't exist in the available path segment values. 
 - You should NEVER create a JSON object using a value that is strongly unrelated to any content in the USER INFORMATION SUMMARY.
-- Pay very careful attention to which keywords (path segment values) are part of which list to ensure you don't try to use a keyword as a value for a key to which it does not belong.
+- Pay very careful attention to which path segment values (path segment values) are part of which list to ensure you don't try to use a path segment value as a value for a key to which it does not belong.
 - Use at least one path segment for each JSON object, but avoid using more than one.
 - Ensure the path segment value corresponds to the correct path segment number based on the provided lists.
 - Create 10 to 19 JSON objects, covering different subjects related to the user information.
@@ -241,8 +242,8 @@ ADDITIONAL GUIDELINES:
 - Don't use the same path segment value more than once. Prefer the most specific match if there are multiple matches.
 - Select at least three from metadata.path_segment_5
 
-Here is the USER INFORMATION SUMMARY. I will repeat it again at the end. Remember to only find keywords that strongly relate to information in the USER INFORMATION SUMMARY.
-For example, if the user is asking for support, select support-related keywords, not security-related keywords. If the user is interested in upgrading, don't bring up keywords about firewalls. Bring up promotional keywords instead.
+Here is the USER INFORMATION SUMMARY. I will repeat it again at the end. Remember to only find path segment values that strongly relate to information in the USER INFORMATION SUMMARY.
+For example, if the user is asking for support, select support-related path segment values, not security-related path segment values. If the user is interested in upgrading, don't bring up path segment values about firewalls. Bring up promotional path segment values instead.
 """
         + """
 USER INFORMATION SUMMARY:
@@ -250,7 +251,7 @@ USER INFORMATION SUMMARY:
 {UserInformationSummary}
 
 
-AVAILABLE KEYWORDS:
+PATH SEGMENT VALUES:
 
 {PathSegmentValues}
 

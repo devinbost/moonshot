@@ -4,9 +4,7 @@ from datetime import datetime
 from operator import itemgetter
 from typing import List, Dict
 
-from langchain.prompts import PromptTemplate
 from langchain.chains import ConversationalRetrievalChain
-from langchain.docstore.document import Document
 from langchain_core.prompts import ChatPromptTemplate
 
 import PromptFactory
