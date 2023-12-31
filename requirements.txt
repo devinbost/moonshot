@@ -2,7 +2,6 @@ aiohttp~=3.8.5
 bs4~=4.12.2
 cassio
 ibm-watson-machine-learning
-langchain~=0.0.352
 newspaper3k
 pandas~=1.5.3
 requests~=2.31.0
@@ -10,7 +9,7 @@ sentence-transformers
 streamlit~=1.29.0
 typing~=3.10.0.0
 wget~=3.2
-
+ragstack-ai
 beautifulsoup4~=4.12.2
 fastapi~=0.105.0
 cassandra-driver>=3.28.0

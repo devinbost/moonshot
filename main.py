@@ -4,7 +4,7 @@ from Chatbot import Chatbot
 from Crawler import Crawler
 from DataAccess import DataAccess
 from SitemapCrawler import SitemapCrawler
-from UserInterface import UserInterface, render
+from UserInterface import UserInterface, render, render_new
 
 
 class Main:
@@ -16,6 +16,7 @@ class Main:
         self.chatbot: Chatbot = None
         self.sitemap_crawler: SitemapCrawler = SitemapCrawler()
 
+    @DeprecationWarning
     def firstRun(self):
         if self.isFirstRun is True:
             self.crawler.async_crawl_and_ingest(
@@ -34,7 +35,7 @@ class Main:
         ui = UserInterface(
             self.dataAccess, self.chatbot, self.crawler, self.sitemap_crawler
         )
-        render(ui.data_access, ui.app_name, ui.chatbot, ui.crawler)
+        render_new(ui.data_access, ui.chatbot, ui.crawler)
 
 
 if __name__ == "__main__":

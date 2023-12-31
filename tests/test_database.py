@@ -46,7 +46,7 @@ class TestGetTableSchemas(unittest.TestCase):
                 ColumnSchema(column_name="name", column_type="string"),
             ],
         )
-        indexes = fake_data_access.get_cql_table_columns(table_schema)
+        indexes = fake_data_access.get_cql_table_keys(table_schema)
         expected_keys = [
             TableKey(
                 column_name="phone_number",
