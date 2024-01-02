@@ -1,7 +1,7 @@
 # Moonshot
 ![moonshot_graphic.png](img%2Fmoonshot_graphic.png)
 
-## Automatic (Zero-code) Hyperpersonalization
+## Automatic (Zero-code, near Zero-config) Hyperpersonalization
 
 Alpha-stage library that could almost replace your customer support department.
 ## Features & Roadmap:
