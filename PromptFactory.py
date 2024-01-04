@@ -273,7 +273,7 @@ def build_collection_vector_find_prompt_v4() -> PromptTemplate:
     prompt = (
         get_helpful_assistant_prefix()
         + """ 
-I will give you 6 lists of path segment values and information about a customer. I want you to use the information to create a list of JSON objects. These JSON objects will be used in a later step to construct queries that will be used to find articles with information that should help the customer. 
+I will give you lists of path segment values and information about a customer. I want you to use the information to create a list of JSON objects. These JSON objects will be used in a later step to construct queries that will be used to find articles with information that should help the customer. 
 It is critical that the path segment values match the customer's intent so that we can retrieve articles that will resonate with the customer. 
 If the path segment values don't relate to the customer's information, then it will be very bad because you will cause the customer to receive information that won't relate to them and could upset or offend them.
 You must follow these rules that apply to each JSON object in the list:

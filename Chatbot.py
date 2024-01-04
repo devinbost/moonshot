@@ -1,5 +1,6 @@
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from operator import itemgetter
 from typing import List, Dict, Any
@@ -74,6 +75,7 @@ class Chatbot:
             retriever=self.data_access.vector_store.as_retriever(),
             return_source_documents=True,
         )
+        self.relevant_table_cache = None
 
     def similarity_search_top_k(
         self, question: str, top_k: int
@@ -188,34 +190,35 @@ class Chatbot:
             str: The bot's response to the customer.
         """
         self.column = column
-        fake_data_access: DataAccess = DataAccess()
+        data_access: DataAccess = DataAccess()
         model: ChatOpenAI = ChatOpenAI(model_name="gpt-4-1106-preview")
+        model35: ChatOpenAI = ChatOpenAI(model_name="gpt-3.5-turbo-1106")
 
-        relevant_table_chain: Runnable = (
-            {
-                "TableList": RunnableLambda(
-                    fake_data_access.get_table_schemas_in_db_v2
-                ),
-                "UserInfo": itemgetter("user_info_not_summary"),
-            }
-            | PromptFactory.build_table_identification_prompt()
-            | model
-            | StrOutputParser()
-            | RunnableLambda(PromptFactory.clean_string_v2)
-            | RunnableLambda(fake_data_access.map_tables_and_populate)
-        )
-        relevant_tables: List[TableSchema] = relevant_table_chain.invoke(
-            {"user_info_not_summary": user_info}
-        )
+        if self.relevant_table_cache is None:
+            relevant_table_chain: Runnable = (
+                {
+                    "TableList": RunnableLambda(data_access.get_table_schemas_in_db_v2),
+                    "UserInfo": itemgetter("user_info_not_summary"),
+                }
+                | PromptFactory.build_table_identification_prompt()
+                | model35
+                | StrOutputParser()
+                | RunnableLambda(PromptFactory.clean_string_v2)
+                | RunnableLambda(data_access.map_tables_and_populate)
+            )
+            relevant_tables: List[TableSchema] = relevant_table_chain.invoke(
+                {"user_info_not_summary": user_info}
+            )
+            self.relevant_table_cache = relevant_tables
         factory: ChainFactory = ChainFactory()
         all_user_table_summaries: List[str] = []
 
-        all_collection_keywords: Dict = fake_data_access.get_path_segment_keywords()
+        all_collection_keywords: Dict = data_access.get_path_segment_keywords()
         all_table_insights: List[str] = []
-        for table in relevant_tables:
+        for table in self.relevant_table_cache:
             self.log_response(f"Found relevant table: {table}")
             table_summarization_chain: Runnable = factory.build_summarization_chain(
-                model, fake_data_access, table
+                model, data_access, table
             )
             table_summarization: str = table_summarization_chain.invoke(
                 {"user_info_not_summary": user_info}
@@ -231,28 +234,22 @@ class Chatbot:
             collection_predicates: str = predicate_identification_chain.invoke({})
             topic_summaries_for_table: List[str] = []
             self.log_response(f"Collection predicates are: {collection_predicates}")
-            for predicate in collection_predicates:
-                self.log_response(f"Topic is: {predicate}")
-                search_results_for_topic: str = fake_data_access.filtered_ANN_search(
-                    predicate, table_summarization
-                )
-                self.log_response(
-                    f"Here were search results for that topic: {search_results_for_topic}"
-                )
-                summarization_of_topic_chain: Runnable = (
-                    factory.build_vector_search_summarization_chain(
-                        model, search_results_for_topic
+
+            with ThreadPoolExecutor() as executor:
+                topic_summaries_for_table = list(
+                    executor.map(
+                        lambda inner_predicate: self.process_predicate(
+                            inner_predicate,
+                            table_summarization,
+                            model,
+                            factory,
+                            data_access,
+                        ),
+                        collection_predicates,
                     )
                 )
-                summarization_of_topic: str = summarization_of_topic_chain.invoke({})
-                self.log_response(
-                    f"Here is the summary for the topic: {summarization_of_topic}"
-                )
 
-                topic_summaries_for_table.append(summarization_of_topic)
-            topic_summaries_for_table_as_string: str = json.dumps(
-                topic_summaries_for_table
-            )
+            topic_summaries_for_table_as_string = json.dumps(topic_summaries_for_table)
             summarization_of_findings_for_table: Runnable = (
                 factory.build_vector_search_summarization_chain(
                     model, topic_summaries_for_table_as_string
@@ -266,6 +263,9 @@ class Chatbot:
 
         recommendation_chain: Runnable = (
             factory.build_final_recommendation_chain_non_parallel(model)
+        )
+        all_user_table_summaries.append(
+            f"User name is: {user_info.to_lcel_json_prefixed()}"
         )
 
         recommendation: str = recommendation_chain.invoke(
@@ -281,3 +281,26 @@ class Chatbot:
 
         self.log_response(f"Recommendation to the user is: {recommendation}")
         return recommendation
+
+    def process_predicate(
+        self, predicate, table_summarization, model, factory, data_access
+    ):
+        # self.log_response(f"Topic is: {predicate}")
+        search_results_for_topic: str = data_access.filtered_ANN_search(
+            predicate, table_summarization
+        )
+        # If search_results_for_topic is None or empty string, then return None.
+
+        # self.log_response(
+        #     f"Here were search results for that topic: {search_results_for_topic}"
+        # )
+        summarization_of_topic_chain: Runnable = (
+            factory.build_vector_search_summarization_chain(
+                model, search_results_for_topic
+            )
+        )
+        summarization_of_topic: str = summarization_of_topic_chain.invoke({})
+        # self.log_response(
+        #     f"Here is the summary for the topic: {summarization_of_topic}"
+        # )
+        return summarization_of_topic

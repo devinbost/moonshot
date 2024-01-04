@@ -976,14 +976,14 @@ RESULTS:"""
         distinct_seg2 = filtered_df["seg2"].unique().tolist()
         distinct_seg3 = df["seg3"].unique().tolist()
         distinct_seg4 = df["seg4"].unique().tolist()
-        distinct_seg5 = df["seg5"].unique().tolist()
-        distinct_seg6 = df["seg6"].unique().tolist()
+        # distinct_seg5 = df["seg5"].unique().tolist()
+        # distinct_seg6 = df["seg6"].unique().tolist()
         distinct_values_dict = {
             "metadata.path_segment_2": distinct_seg2,
             "metadata.path_segment_3": distinct_seg3,
             "metadata.path_segment_4": distinct_seg4,
-            "metadata.path_segment_5": distinct_seg5,
-            "metadata.path_segment_6": distinct_seg6,
+            # "metadata.path_segment_5": distinct_seg5,
+            # "metadata.path_segment_6": distinct_seg6,
         }
         return distinct_values_dict
 

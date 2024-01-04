@@ -286,7 +286,8 @@ def render_new(data_access: DataAccess, chatbot: Chatbot, crawler: Crawler):
             ),
         ]
     )
-    setup_sitemap_crawler_ui(col2, crawler)
+    if col1.checkbox("Enable web crawler?", value=False):
+        setup_sitemap_crawler_ui(col2, crawler)
     user_chat_area = col1.text_area("Enter message here")
     searched = col1.button("Search")
 
