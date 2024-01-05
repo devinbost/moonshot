@@ -204,6 +204,26 @@ class ChainFactory:
         )
         return path_segment_keyword_chain
 
+    def build_keyword_reduction_prompt_chain(
+        self, model: ChatOpenAI, user_info_summary: Any, keywords: List[str]
+    ):
+        def test(x):
+            y = json.loads(x)
+            return y
+
+        path_segment_keyword_chain = (
+            {
+                "Keywords": RunnableLambda(lambda x: keywords),
+                "UserInformationSummary": RunnableLambda(lambda x: user_info_summary),
+            }
+            | PromptFactory.build_keyword_reduction_prompt()
+            | model
+            | StrOutputParser()
+            | RunnableLambda(PromptFactory.clean_string_v2)
+            | RunnableLambda(lambda x: test(x))
+        )
+        return path_segment_keyword_chain
+
     def build_collection_predicate_chain_non_parallel(
         self,
         model: ChatOpenAI,
@@ -286,13 +306,34 @@ class ChainFactory:
         Returns:
             Runnable: A runnable chain for vector search result summarization.
         """
-        collection_summary_chain = (
-            {"Information": RunnableLambda(lambda x: search_results[:16000])}
-            | PromptFactory.build_summarization_prompt()
-            | self.model35
-            | StrOutputParser()
-        )
-        return collection_summary_chain
+        if search_results is not None:
+            collection_summary_chain = (
+                {"Information": RunnableLambda(lambda x: search_results[:16000])}
+                | PromptFactory.build_summarization_prompt()
+                | self.model35
+                | StrOutputParser()
+            )
+            return collection_summary_chain
+
+    def build_vector_search_summarization_chain4(
+        self, model: ChatOpenAI, search_results: str
+    ) -> Runnable:
+        """
+        Builds a chain for summarizing vector search results.
+        Parameters:
+            model (ChatOpenAI): The model to be used for generating prompts and processing responses.
+            search_results (str): The search results to be summarized.
+        Returns:
+            Runnable: A runnable chain for vector search result summarization.
+        """
+        if search_results is not None:
+            collection_summary_chain = (
+                {"Information": RunnableLambda(lambda x: search_results[:16000])}
+                | PromptFactory.build_summarization_prompt()
+                | model
+                | StrOutputParser()
+            )
+            return collection_summary_chain
 
     def build_astrapy_collection_summarization_chain(
         self,

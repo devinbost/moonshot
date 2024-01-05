@@ -180,7 +180,7 @@ def build_summarization_prompt() -> PromptTemplate:
         "be included.)\n You want to provide a technical summary that can be used for subsequent steps where the "
         "information will be assimiliated by a customer support agent to answer a question for a customer. Focus on "
         "information that might be relevant for a customer. If the information I provide is all blank after I say "
-        '"Here is the information I want you to summarize:", return "skipped"'
+        '"Here is the information I want you to summarize:", return "articles not actually relevant"'
         "Here is the information I want you to summarize:"
         ""
         ""
@@ -263,6 +263,29 @@ PATH SEGMENT VALUES:
 ================
 USER INFORMATION SUMMARY:
 
+{UserInformationSummary}
+"""
+    )
+    return PromptTemplate.from_template(prompt)
+
+
+def build_keyword_reduction_prompt() -> PromptTemplate:
+    prompt = (
+        get_helpful_assistant_prefix()
+        + """
+I will give you a list of keywords (like 5g-mobile-gaming) within a KEYWORDS section, and I will give you some user information within a USER INFORMATION section.
+I want you to select only those keywords from the KEYWORDS section that match information in the USER INFORMATION section.
+Return the top 10 best matches. ONLY return keywords that exist in the KEYWORDS section. DO NOT return any keyword from the USER INFORMATION section
+unless it also exists in the KEYWORDS section. Keywords may or may not contain hyphens, but they are always delimited by a comma or new line character.
+Return only the filtered list of keywords as a single JSON array in the format:
+["key-word1", "key-word2", . . . , "keywordN"]
+
+===========
+KEYWORDS:
+{Keywords}
+
+===========
+USER INFORMATION SUMMARY:
 {UserInformationSummary}
 """
     )

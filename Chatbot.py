@@ -3,7 +3,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from operator import itemgetter
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 
 from langchain.chains import ConversationalRetrievalChain
 from langchain_core.prompts import ChatPromptTemplate
@@ -167,7 +167,7 @@ class Chatbot:
         return bot_response
 
     def log_response(
-        self, entry_type: str, bot_message: str | List[dict[str, str]]
+        self, entry_type: str, bot_message: str | List[dict[str, str]], show_time=False
     ) -> None:
         """
         Logs the bot's response.
@@ -178,21 +178,52 @@ class Chatbot:
         print(bot_message)
         logging.info(bot_message)
         timestamp = datetime.utcnow().strftime("%Y%m%d-%H-%M-%S-%f")
-        if entry_type == "Predicates":
-            for topic in bot_message:
-                topic_value = next(iter(topic.values()))
-                topics += topic_value + ", "
-            self.column.text_area(
-                entry_type,
-                value=f"List of relevant topics found: {topics}. Time: {timestamp}",
-                key=timestamp,
-            )
+        if show_time:
+            if entry_type == "Relevant Topics":
+                for topic in bot_message:
+                    topic_value = next(iter(topic.values()))
+                    topics += topic_value + ", "
+                self.column.text_area(
+                    entry_type,
+                    value=f"Company docs were found on these relevant topics:\n\n {topics}. Time: {timestamp}",
+                    key=timestamp,
+                )
+            else:
+                self.column.text_area(
+                    entry_type,
+                    value=bot_message + f". Time: {timestamp}",
+                    key=timestamp,
+                )
         else:
-            self.column.text_area(
-                entry_type,
-                value=bot_message + f". Time: {timestamp}",
-                key=timestamp,
-            )
+            if entry_type == "Predicates":
+                for topic in bot_message:
+                    topic_value = next(iter(topic.values()))
+                    topics += topic_value + ", "
+                self.column.text_area(
+                    entry_type,
+                    value=f"Company docs found on these relevant topics:\n\n {topics}",
+                    key=timestamp,
+                )
+            else:
+                self.column.text_area(
+                    entry_type,
+                    value=bot_message,
+                    key=timestamp,
+                )
+
+    def slice_into_chunks(
+        self, collection_group: str, lst, n
+    ) -> List[Tuple[str, List[str]]]:
+        # Calculate the size of each chunk
+        chunk_size = len(lst) // n
+        # Handle the case where the list size isn't perfectly divisible by n
+        if len(lst) % n != 0:
+            chunk_size += 1
+            # Create a list of dictionaries
+        return [
+            (collection_group, lst[i : i + chunk_size])
+            for i in range(0, len(lst), chunk_size)
+        ]
 
     def answer_customer(
         self, user_message: str, user_info: UserInfo, column: Any
@@ -210,7 +241,7 @@ class Chatbot:
         data_access: DataAccess = DataAccess()
         model: ChatOpenAI = ChatOpenAI(model_name="gpt-4-1106-preview")
         model35: ChatOpenAI = ChatOpenAI(model_name="gpt-3.5-turbo-1106")
-
+        self.log_response("Start", "Inspecting hundreds of tables in the database")
         if self.relevant_table_cache is None:
             relevant_table_chain: Runnable = (
                 {
@@ -230,9 +261,20 @@ class Chatbot:
         factory: ChainFactory = ChainFactory()
         all_user_table_summaries: List[str] = []
 
-        self.log_response("Status", f"Getting path segment keywords")
-        all_collection_keywords: Dict = data_access.get_path_segment_keywords()
-        # Use cosine similarity to get relevant keywords
+        # self.log_response("Status", f"Getting path segment keywords")
+        all_collection_keywords: Dict[
+            str, List[str]
+        ] = data_access.get_path_segment_keywords()
+        keyword_list_slices: List[Tuple[str, List[str]]] = []
+        # ^^ [('metadata.path_segment_2': ['aqa-case-with-glitter-for-iphone-12-iphone-12-pro', 'business',. . .
+
+        keyword_list_slices: List[Tuple[str, List[str]]] = self.build_keyword_slices(
+            all_collection_keywords, keyword_list_slices
+        )
+        # keyword_list_slices = [
+        #     (k, sorted(v, key=lambda x: (x is None, x))) for k, v in keyword_list_slices
+        # ]
+        keyword_list_slices = [(k, sorted(v)) for k, v in keyword_list_slices]
 
         all_table_insights: List[str] = []
         for table in self.relevant_table_cache:
@@ -246,21 +288,68 @@ class Chatbot:
                 {"user_info_not_summary": user_info}
             )
             self.log_response(
-                "Table Summary", f"Here is the table summary: {table_summarization}"
+                "Table Summary",
+                f"Summary of what we know about customer from this table:\n\n {table_summarization}",
             )
             all_user_table_summaries.append(table_summarization)
 
+            # I need to reduce the number of keywords that get used in the next step.
+
+            # Do this in parallel:
+            self.log_response(
+                "Inspecting Knowledge Base",
+                f"Evaluating thousands of topics across company knowledge base for insights",
+            )
+            keyword_reduction_chains: List[Tuple[str, Runnable]] = [
+                (
+                    keyword_list_slice[0],
+                    factory.build_keyword_reduction_prompt_chain(
+                        model35, table_summarization, keyword_list_slice[1]
+                    ),
+                )
+                for keyword_list_slice in keyword_list_slices
+            ]
+            # [('metadata.path_segment_2', {
+            #   chain
+            # }
+
+            with ThreadPoolExecutor() as executor:
+                reduced_keyword_list = list(
+                    executor.map(
+                        lambda keyed_chain: (keyed_chain[0], keyed_chain[1].invoke({})),
+                        keyword_reduction_chains,
+                    )
+                )
+            # [('metadata.path_segment_2', '["international-long-distance-faqs", "nokia-2720-v-flip-update", "5g-home-router-trou . . .
+            # Aggregate results based on keys
+            reduced_segment_keywords = self.reduce_segments(reduced_keyword_list)
+            deduped_segment_keywords = {
+                key: list(set(value)) for key, value in reduced_segment_keywords.items()
+            }
+
+            real_deduped_keys = self.get_real_keys(
+                all_collection_keywords, deduped_segment_keywords
+            )
+            self.log_response("Relevant Topics List", real_deduped_keys)
+            real_predicates = []
+            for key in deduped_segment_keywords.keys():
+                for value in deduped_segment_keywords[key]:
+                    if value is not None:
+                        real_predicates.append({key: value})
+
             predicate_identification_chain: Runnable = (
                 factory.build_collection_predicate_chain_non_parallel_v2(
-                    model, table_summarization, all_collection_keywords
+                    model, table_summarization, deduped_segment_keywords
                 )
             )
 
             collection_predicates: str = predicate_identification_chain.invoke({})
 
             topic_summaries_for_table: List[str] = []
-            self.log_response("Predicates", collection_predicates)
-
+            # self.log_response("Relevant Topics", collection_predicates)
+            self.log_response(
+                "Status", "Reading all articles on these topics in knowledge base"
+            )
             with ThreadPoolExecutor() as executor:
                 topic_summaries_for_table = list(
                     executor.map(
@@ -274,18 +363,23 @@ class Chatbot:
                         collection_predicates,
                     )
                 )
-            self.log_response("Status", "Ran thread pool")
+            # self.log_response("Status", "Ran thread pool")
             topic_summaries_for_table_as_string = json.dumps(topic_summaries_for_table)
-            summarization_of_findings_for_table: Runnable = (
-                factory.build_vector_search_summarization_chain(
-                    model, topic_summaries_for_table_as_string
+            logging.info(topic_summaries_for_table_as_string)
+            print(topic_summaries_for_table_as_string)
+            if topic_summaries_for_table_as_string is not None:
+                summarization_of_findings_for_table: Runnable = (
+                    factory.build_vector_search_summarization_chain(
+                        model35, topic_summaries_for_table_as_string
+                    )
                 )
-            )
+            else:
+                print("error")
 
             insights_on_table: str = summarization_of_findings_for_table.invoke({})
             self.log_response(
                 "Summary of Topics",
-                f"Here is the full summarization for the table across its topics: {insights_on_table}",
+                f"Here's what we know that might be relevant from reading company docs on all of those topics:\n\n {insights_on_table}",
             )
             all_table_insights.append(insights_on_table)
 
@@ -312,6 +406,35 @@ class Chatbot:
         )
         return recommendation
 
+    def get_real_keys(self, all_collection_keywords, deduped_segment_keywords):
+        real_deduped_keys = {}
+        for key in deduped_segment_keywords.keys():
+            for value in deduped_segment_keywords[key]:
+                if value in all_collection_keywords[key]:
+                    if key in real_deduped_keys:
+                        real_deduped_keys[key].append(value)
+                    else:
+                        real_deduped_keys[key] = [value]
+        return real_deduped_keys
+
+    def reduce_segments(self, reduced_keyword_list):
+        reduced_segment_keywords = {}
+        for key, result in reduced_keyword_list:
+            if key in reduced_segment_keywords:
+                reduced_segment_keywords[key].extend(result)
+            else:
+                reduced_segment_keywords[key] = result
+        return reduced_segment_keywords
+
+    def build_keyword_slices(self, all_collection_keywords, keyword_list_slices):
+        for collection_group in all_collection_keywords.keys():
+            list_for_seg: List[str] = all_collection_keywords[collection_group]
+            list_slices: List[Tuple[str, List[str]]] = self.slice_into_chunks(
+                collection_group, list_for_seg, 20
+            )  # Sliced into 20 sublists
+            keyword_list_slices.extend(list_slices)
+        return keyword_list_slices
+
     def process_predicate(
         self, predicate, table_summarization, model, factory, data_access
     ):
@@ -324,13 +447,16 @@ class Chatbot:
         # self.log_response(
         #     f"Here were search results for that topic: {search_results_for_topic}"
         # )
-        summarization_of_topic_chain: Runnable = (
+        summarization_of_topic_chain: Runnable | None = (
             factory.build_vector_search_summarization_chain(
                 model, search_results_for_topic
             )
         )
-        summarization_of_topic: str = summarization_of_topic_chain.invoke({})
-        # self.log_response(
-        #     f"Here is the summary for the topic: {summarization_of_topic}"
-        # )
-        return summarization_of_topic
+        if summarization_of_topic_chain is not None:
+            summarization_of_topic: str = summarization_of_topic_chain.invoke({})
+            # self.log_response(
+            #     f"Here is the summary for the topic: {summarization_of_topic}"
+            # )
+            return summarization_of_topic
+        else:
+            return ""
