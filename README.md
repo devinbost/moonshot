@@ -72,3 +72,13 @@ ASTRA_DB_API_ENDPOINT=https://my-id-my-region.apps.astra.datastax.com (copy from
 - Rewrite tests to use proper mocks,stubs, and fakes 
 - Parallelize chains to improve performance
 - Consolidate configs
+
+
+## Research influences:
+From the work of Dong, X. et al. (2023), the most common source of errors was incorrect selection of table or column names. 
+For this reason, we used a semi-structured approach to code generation where we used a hybrid approach that combined:
+1. a specific prompt/chain for determining relevant tables 
+2. a semi-structured approach where some of the code body was already provided
+This hybrid approach is easier to control for security and auth purposes as well since authorization can be checked before code is executed.
+
+Dong, X., Zhang, C., Ge, Y., Mao, Y., Gao, Y., Lin, J., & Lou, D. (2023). C3: Zero-shot Text-to-SQL with ChatGPT. arXiv preprint arXiv:2307.07306.

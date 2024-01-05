@@ -12,6 +12,9 @@ import PromptFactory
 from ChainFactory import ChainFactory
 from DataAccess import DataAccess
 import os
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 from ibm_watson_machine_learning.foundation_models import Model
 from ibm_watson_machine_learning.foundation_models.extensions.langchain import (
     WatsonxLLM,
@@ -163,19 +166,33 @@ class Chatbot:
         # We may want to also capture bot_response["source_documents"] for analytics later
         return bot_response
 
-    def log_response(self, bot_message: str) -> None:
+    def log_response(
+        self, entry_type: str, bot_message: str | List[dict[str, str]]
+    ) -> None:
         """
         Logs the bot's response.
         Parameters:
             bot_message (str): The message to be logged.
         """
+        topics = ""
         print(bot_message)
         logging.info(bot_message)
-        self.column.text_area(
-            "Bot Log Entry",
-            value=bot_message,
-            key=datetime.utcnow().strftime("%Y%m%d%H%M%S%f"),
-        )
+        timestamp = datetime.utcnow().strftime("%Y%m%d-%H-%M-%S-%f")
+        if entry_type == "Predicates":
+            for topic in bot_message:
+                topic_value = next(iter(topic.values()))
+                topics += topic_value + ", "
+            self.column.text_area(
+                entry_type,
+                value=f"List of relevant topics found: {topics}. Time: {timestamp}",
+                key=timestamp,
+            )
+        else:
+            self.column.text_area(
+                entry_type,
+                value=bot_message + f". Time: {timestamp}",
+                key=timestamp,
+            )
 
     def answer_customer(
         self, user_message: str, user_info: UserInfo, column: Any
@@ -201,7 +218,7 @@ class Chatbot:
                     "UserInfo": itemgetter("user_info_not_summary"),
                 }
                 | PromptFactory.build_table_identification_prompt()
-                | model35
+                | model
                 | StrOutputParser()
                 | RunnableLambda(PromptFactory.clean_string_v2)
                 | RunnableLambda(data_access.map_tables_and_populate)
@@ -213,17 +230,24 @@ class Chatbot:
         factory: ChainFactory = ChainFactory()
         all_user_table_summaries: List[str] = []
 
+        self.log_response("Status", f"Getting path segment keywords")
         all_collection_keywords: Dict = data_access.get_path_segment_keywords()
+        # Use cosine similarity to get relevant keywords
+
         all_table_insights: List[str] = []
         for table in self.relevant_table_cache:
-            self.log_response(f"Found relevant table: {table}")
+            self.log_response(
+                "Found Table", f"Found relevant table: {table.table_name}"
+            )
             table_summarization_chain: Runnable = factory.build_summarization_chain(
                 model, data_access, table
             )
             table_summarization: str = table_summarization_chain.invoke(
                 {"user_info_not_summary": user_info}
             )
-            self.log_response(f"Here is the table summary: {table_summarization}")
+            self.log_response(
+                "Table Summary", f"Here is the table summary: {table_summarization}"
+            )
             all_user_table_summaries.append(table_summarization)
 
             predicate_identification_chain: Runnable = (
@@ -231,9 +255,11 @@ class Chatbot:
                     model, table_summarization, all_collection_keywords
                 )
             )
+
             collection_predicates: str = predicate_identification_chain.invoke({})
+
             topic_summaries_for_table: List[str] = []
-            self.log_response(f"Collection predicates are: {collection_predicates}")
+            self.log_response("Predicates", collection_predicates)
 
             with ThreadPoolExecutor() as executor:
                 topic_summaries_for_table = list(
@@ -248,16 +274,18 @@ class Chatbot:
                         collection_predicates,
                     )
                 )
-
+            self.log_response("Status", "Ran thread pool")
             topic_summaries_for_table_as_string = json.dumps(topic_summaries_for_table)
             summarization_of_findings_for_table: Runnable = (
                 factory.build_vector_search_summarization_chain(
                     model, topic_summaries_for_table_as_string
                 )
             )
+
             insights_on_table: str = summarization_of_findings_for_table.invoke({})
             self.log_response(
-                f"Here is the full summarization for the table across its topics: {insights_on_table}"
+                "Summary of Topics",
+                f"Here is the full summarization for the table across its topics: {insights_on_table}",
             )
             all_table_insights.append(insights_on_table)
 
@@ -279,7 +307,9 @@ class Chatbot:
 
         self.our_responses.append(recommendation)
 
-        self.log_response(f"Recommendation to the user is: {recommendation}")
+        self.log_response(
+            "Recommendation", f"Recommendation to the user is: {recommendation}"
+        )
         return recommendation
 
     def process_predicate(

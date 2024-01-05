@@ -174,7 +174,7 @@ def build_summarization_prompt() -> PromptTemplate:
         "providing you. This information will be used to either summarize something about a customer or "
         "something we know internally that we will use to make a recommendation, so keep that in mind as you "
         "write the summary. You want to focus your summary around technical information that might influence a "
-        "recommendation or decision."
+        "recommendation or decision. If there are relevant prices or numbers, be sure to include them."
         "Don't be wordy, but provide enough detail so that patterns can "
         "be identified when this summary is combined with others. Any device-specific or plan-specific details should "
         "be included.)\n You want to provide a technical summary that can be used for subsequent steps where the "
@@ -290,20 +290,15 @@ ADDITIONAL GUIDELINES:
 - Pay very careful attention to which path segment values (path segment values) are part of which list to ensure you don't try to use a path segment value as a value for a key to which it does not belong.
 - Use at least one path segment for each JSON object, but avoid using more than one.
 - Ensure the path segment value corresponds to the correct path segment number based on the provided lists.
-- Create 10 to 19 JSON objects, covering different subjects related to the user information.
-- Aim for diversity in path segment usage, with at least 3 objects for each path segment from 2 to 6, selecting the most specific matches possible.
+- Create 5 to 10 JSON objects, covering different subjects related to the user information.
+- Aim for diversity in path segment usage, with at least 3 objects for each path segment from 2 to 4, selecting the most specific matches possible.
 - Ensure the path segment value is strongly associated with at least some of the content of the USER INFORMATION SUMMARY below.
 - Don't use the same path segment value more than once. Prefer the most specific match if there are multiple matches.
-- Select at least three from metadata.path_segment_5
 
-Here is the USER INFORMATION SUMMARY. I will repeat it again at the end. Remember to only find path segment values that strongly relate to information in the USER INFORMATION SUMMARY.
+The USER INFORMATION SUMMARY is at the end. Remember to only find path segment values that strongly relate to information in the USER INFORMATION SUMMARY.
 For example, if the user is asking for support, select support-related path segment values, not security-related path segment values. If the user is interested in upgrading, don't bring up path segment values about firewalls. Bring up promotional path segment values instead.
 """
         + """
-USER INFORMATION SUMMARY:
-
-{UserInformationSummary}
-
 
 PATH SEGMENT VALUES:
 
