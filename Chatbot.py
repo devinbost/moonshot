@@ -339,12 +339,14 @@ class Chatbot:
 
             predicate_identification_chain: Runnable = (
                 factory.build_collection_predicate_chain_non_parallel_v2(
-                    model, table_summarization, deduped_segment_keywords
+                    model, table_summarization, real_deduped_keys
                 )
             )
 
             collection_predicates: str = predicate_identification_chain.invoke({})
+            # Need to replace with real predicates
 
+            self.log_response("Relevant predicates List", collection_predicates)
             topic_summaries_for_table: List[str] = []
             # self.log_response("Relevant Topics", collection_predicates)
             self.log_response(

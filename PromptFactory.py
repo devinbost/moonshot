@@ -170,16 +170,14 @@ def build_summarization_prompt() -> PromptTemplate:
         PromptTemplate: The constructed prompt template for summarization.
     """
     prompt = (
-        "You're a helpful assistant. I'm will give you some information, and I want you to summarize what I'm "
+        "You're a helpful assistant. I'm will give you some information, and I want you to give a very detailed summary of what I'm "
         "providing you. This information will be used to either summarize something about a customer or "
-        "something we know internally that we will use to make a recommendation, so keep that in mind as you "
-        "write the summary. You want to focus your summary around technical information that might influence a "
+        "something we know internally that we will use to make a recommendation. "
+        "You want to focus your summary around technical information that might influence a "
         "recommendation or decision. If there are relevant prices or numbers, be sure to include them."
-        "Don't be wordy, but provide enough detail so that patterns can "
+        "Provide enough detail so that patterns can "
         "be identified when this summary is combined with others. Any device-specific or plan-specific details should "
-        "be included.)\n You want to provide a technical summary that can be used for subsequent steps where the "
-        "information will be assimiliated by a customer support agent to answer a question for a customer. Focus on "
-        "information that might be relevant for a customer. If the information I provide is all blank after I say "
+        "be included.)\n Be sure to summarize every topic that you're given. (Don't skip anything.) If the information I provide is all blank after I say "
         '"Here is the information I want you to summarize:", return "articles not actually relevant"'
         "Here is the information I want you to summarize:"
         ""
@@ -275,7 +273,7 @@ def build_keyword_reduction_prompt() -> PromptTemplate:
         + """
 I will give you a list of keywords (like 5g-mobile-gaming) within a KEYWORDS section, and I will give you some user information within a USER INFORMATION section.
 I want you to select only those keywords from the KEYWORDS section that match information in the USER INFORMATION section.
-Return the top 10 best matches. ONLY return keywords that exist in the KEYWORDS section. DO NOT return any keyword from the USER INFORMATION section
+Return the top 3 best matches. ONLY return keywords that exist in the KEYWORDS section. DO NOT return any keyword from the USER INFORMATION section
 unless it also exists in the KEYWORDS section. Keywords may or may not contain hyphens, but they are always delimited by a comma or new line character.
 Return only the filtered list of keywords as a single JSON array in the format:
 ["key-word1", "key-word2", . . . , "keywordN"]
