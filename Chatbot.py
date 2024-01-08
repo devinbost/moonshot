@@ -167,7 +167,10 @@ class Chatbot:
         return bot_response
 
     def log_response(
-        self, entry_type: str, bot_message: str | List[dict[str, str]], show_time=False
+        self,
+        entry_type: str,
+        bot_message: str | List[dict[str, str]] | dict[str, List[str]],
+        show_time=False,
     ) -> None:
         """
         Logs the bot's response.
@@ -186,13 +189,13 @@ class Chatbot:
                 self.column.text_area(
                     entry_type,
                     value=f"Company docs were found on these relevant topics:\n\n {topics}. Time: {timestamp}",
-                    key=timestamp,
+                    key=datetime.utcnow().strftime("%Y%m%d-%H-%M-%S-%f"),
                 )
             else:
                 self.column.text_area(
                     entry_type,
                     value=bot_message + f". Time: {timestamp}",
-                    key=timestamp,
+                    key=datetime.utcnow().strftime("%Y%m%d-%H-%M-%S-%f"),
                 )
         else:
             if entry_type == "Predicates":
@@ -202,13 +205,29 @@ class Chatbot:
                 self.column.text_area(
                     entry_type,
                     value=f"Company docs found on these relevant topics:\n\n {topics}",
-                    key=timestamp,
+                    key=datetime.utcnow().strftime("%Y%m%d-%H-%M-%S-%f"),
+                )
+            if entry_type == "Relevant Topics List":
+                result = ", ".join(
+                    item for sublist in bot_message.values() for item in sublist
+                )
+                self.column.text_area(
+                    entry_type,
+                    value=f"These were the most relevant topics:\n\n {result}.",
+                    key=datetime.utcnow().strftime("%Y%m%d-%H-%M-%S-%f"),
+                )
+            if entry_type == "Relevant predicates List":
+                result = ", ".join(value for d in bot_message for value in d.values())
+                self.column.text_area(
+                    entry_type,
+                    value=f"These appeared to be the most relevant of those topics:\n\n {result}.",
+                    key=datetime.utcnow().strftime("%Y%m%d-%H-%M-%S-%f"),
                 )
             else:
                 self.column.text_area(
                     entry_type,
                     value=bot_message,
-                    key=timestamp,
+                    key=datetime.utcnow().strftime("%Y%m%d-%H-%M-%S-%f"),
                 )
 
     def slice_into_chunks(
@@ -298,7 +317,7 @@ class Chatbot:
             # Do this in parallel:
             self.log_response(
                 "Inspecting Knowledge Base",
-                f"Evaluating thousands of topics across company knowledge base for insights",
+                f"Evaluating thousands of articles across company knowledge base for insights",
             )
             keyword_reduction_chains: List[Tuple[str, Runnable]] = [
                 (
@@ -372,7 +391,7 @@ class Chatbot:
             if topic_summaries_for_table_as_string is not None:
                 summarization_of_findings_for_table: Runnable = (
                     factory.build_vector_search_summarization_chain(
-                        model35, topic_summaries_for_table_as_string
+                        model, topic_summaries_for_table_as_string
                     )
                 )
             else:

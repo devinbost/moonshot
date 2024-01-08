@@ -208,8 +208,13 @@ class ChainFactory:
         self, model: ChatOpenAI, user_info_summary: Any, keywords: List[str]
     ):
         def test(x):
-            y = json.loads(x)
-            return y
+            try:
+                y = json.loads(x)
+                return y
+            except Exception as ex:
+                temp = "{" + x + "}"
+                y = json.loads(temp)
+                return y
 
         path_segment_keyword_chain = (
             {
