@@ -1,3 +1,5 @@
+import logging
+
 from cassandra.cluster import (
     Cluster,
     Session,
@@ -968,22 +970,22 @@ RESULTS:"""
 
         # Convert results to a DataFrame
         df = pd.DataFrame(results)
-        distinct_seg1 = df["seg1"].unique().tolist()
+        # distinct_seg1 = df["seg1"].unique().tolist()
         filtered_df = df[
             ~df["seg2"].str.contains("knowledge-base", na=False)
             & ~df["seg2"].str.contains("legal", na=False)
         ]
-        distinct_seg2 = filtered_df["seg2"].unique().tolist()
-        distinct_seg3 = df["seg3"].unique().tolist()
-        distinct_seg4 = df["seg4"].unique().tolist()
-        distinct_seg5 = df["seg5"].unique().tolist()
-        distinct_seg6 = df["seg6"].unique().tolist()
+        distinct_seg2 = [x for x in filtered_df["seg2"].unique() if x is not None]
+        distinct_seg3 = [x for x in df["seg3"].unique() if x is not None]
+        distinct_seg4 = [x for x in df["seg4"].unique() if x is not None]
+        # distinct_seg5 = df["seg5"].unique().tolist()
+        # distinct_seg6 = df["seg6"].unique().tolist()
         distinct_values_dict = {
             "metadata.path_segment_2": distinct_seg2,
             "metadata.path_segment_3": distinct_seg3,
             "metadata.path_segment_4": distinct_seg4,
-            "metadata.path_segment_5": distinct_seg5,
-            "metadata.path_segment_6": distinct_seg6,
+            # "metadata.path_segment_5": distinct_seg5,
+            # "metadata.path_segment_6": distinct_seg6,
         }
         return distinct_values_dict
 
@@ -1005,13 +1007,16 @@ RESULTS:"""
         collection = AstraDBCollection(
             collection_name="sitemapls", astra_db=self.astrapy_db
         )
-        results: List[Dict[str, Any]] = collection.vector_find(
-            vector=input_vector,
-            filter=collection_filter,
-            limit=20,
-        )
-        results_as_string = json.dumps(results)
-        return results_as_string
+        try:
+            results: List[Dict[str, Any]] = collection.vector_find(
+                vector=input_vector,
+                filter=collection_filter,
+                limit=20,
+            )
+            results_as_string = json.dumps(results)
+            return results_as_string
+        except Exception as ex:
+            logging.error("Error reading from DB. Exception: " + str(ex))
 
     def filtered_ANN_search_maker(
         self, user_summary: dict[str, str]

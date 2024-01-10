@@ -14,12 +14,13 @@ from pydantic_models.UserInfo import UserInfo
 
 class ChainFactory:
     def __new__(cls, *args, **kwargs):
-        print("1. Create a new instance of Point.")
         return super().__new__(cls)
 
-    @staticmethod
+    def __init__(self):
+        self.model35: ChatOpenAI = ChatOpenAI(model_name="gpt-3.5-turbo-1106")
+
     def build_summarization_chain(
-        model: ChatOpenAI, data_access: DataAccess, table_schema: TableSchema
+        self, model: ChatOpenAI, data_access: DataAccess, table_schema: TableSchema
     ) -> Runnable:
         """
         Builds a chain for summarizing table data using a specified model and data access object.
@@ -37,18 +38,18 @@ class ChainFactory:
             user_props = testme["user_info_not_summary"]
             return user_props
 
-        top3_chain: Runnable = (
-            PromptFactory.build_select_query_for_top_three_rows_parallelizable(
-                table_schema
-            )
-            | model
-            | StrOutputParser()
-            | RunnableLambda(PromptFactory.clean_string_v2)
-            | RunnableLambda(data_access.exec_cql_query_simple)
-        )
+        # top3_chain: Runnable = (
+        #     PromptFactory.build_select_query_for_top_three_rows_parallelizable(
+        #         table_schema
+        #     )
+        #     | model
+        #     | StrOutputParser()
+        #     | RunnableLambda(PromptFactory.clean_string_v2)
+        #     | RunnableLambda(data_access.exec_cql_query_simple)
+        # )
         select_with_where_chain: Runnable = (
             {
-                "Top3Rows": top3_chain,
+                # "Top3Rows": top3_chain,
                 "PropertyInfo": test_func,  # Should be user properties of some kind
             }
             | PromptFactory.build_select_query_with_where_parallelizable(table_schema)
@@ -60,7 +61,7 @@ class ChainFactory:
         table_summarization_chain: Runnable = (
             {"Information": select_with_where_chain}
             | PromptFactory.build_summarization_prompt()
-            | model
+            | self.model35
             | StrOutputParser()
         )
         return table_summarization_chain
@@ -197,9 +198,34 @@ class ChainFactory:
                 "UserInformationSummary": user_info_summary_parallelizable_chain,
             }
             | PromptFactory.build_collection_vector_find_prompt()
+            | self.model35
+            | StrOutputParser()
+            | RunnableLambda(PromptFactory.clean_string_v2)
+        )
+        return path_segment_keyword_chain
+
+    def build_keyword_reduction_prompt_chain(
+        self, model: ChatOpenAI, user_info_summary: Any, keywords: List[str]
+    ):
+        def test(x):
+            try:
+                y = json.loads(x)
+                return y
+            except Exception as ex:
+                temp = "{" + x + "}"
+                y = json.loads(temp)
+                return y
+
+        path_segment_keyword_chain = (
+            {
+                "Keywords": RunnableLambda(lambda x: keywords),
+                "UserInformationSummary": RunnableLambda(lambda x: user_info_summary),
+            }
+            | PromptFactory.build_keyword_reduction_prompt()
             | model
             | StrOutputParser()
             | RunnableLambda(PromptFactory.clean_string_v2)
+            | RunnableLambda(lambda x: test(x))
         )
         return path_segment_keyword_chain
 
@@ -285,13 +311,34 @@ class ChainFactory:
         Returns:
             Runnable: A runnable chain for vector search result summarization.
         """
-        collection_summary_chain = (
-            {"Information": RunnableLambda(lambda x: search_results)}
-            | PromptFactory.build_summarization_prompt()
-            | model
-            | StrOutputParser()
-        )
-        return collection_summary_chain
+        if search_results is not None:
+            collection_summary_chain = (
+                {"Information": RunnableLambda(lambda x: search_results[:16000])}
+                | PromptFactory.build_summarization_prompt()
+                | model
+                | StrOutputParser()
+            )
+            return collection_summary_chain
+
+    def build_vector_search_summarization_chain4(
+        self, model: ChatOpenAI, search_results: str
+    ) -> Runnable:
+        """
+        Builds a chain for summarizing vector search results.
+        Parameters:
+            model (ChatOpenAI): The model to be used for generating prompts and processing responses.
+            search_results (str): The search results to be summarized.
+        Returns:
+            Runnable: A runnable chain for vector search result summarization.
+        """
+        if search_results is not None:
+            collection_summary_chain = (
+                {"Information": RunnableLambda(lambda x: search_results[:16000])}
+                | PromptFactory.build_summarization_prompt()
+                | model
+                | StrOutputParser()
+            )
+            return collection_summary_chain
 
     def build_astrapy_collection_summarization_chain(
         self,
@@ -451,7 +498,7 @@ class ChainFactory:
                 | RunnableLambda(lambda x: x.reverse()),
             }
             | PromptFactory.build_final_response_prompt()
-            | model
+            | model.bind(stop="Best regards,")
             | StrOutputParser()
         )
         return final_chain
