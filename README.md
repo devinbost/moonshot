@@ -1,7 +1,7 @@
 # Moonshot
 ![moonshot_graphic.png](img%2Fmoonshot_graphic.png)
 
-## Automatic Hyperpersonalization
+## Automatic (Zero-code, near Zero-config) Hyperpersonalization
 
 Alpha-stage library that could almost replace your customer support department.
 ## Features & Roadmap:
@@ -28,6 +28,9 @@ Alpha-stage library that could almost replace your customer support department.
 
 ## Hyperpersonalization architecture:
 ![Example moonshot pipeline.png](img%2FExample%20moonshot%20pipeline.png)
+
+## Contributing
+Start by walking through the code in this method: [Personalization flow](https://github.com/devinbost/moonshot/blob/a62c38e8c68e88d78545797560cf3e760d17f87e/Chatbot.py#L178) 
 
 ## Feedback welcome!
 We'd love to get feedback on what we can do to improve this library. 
