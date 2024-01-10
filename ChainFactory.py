@@ -315,7 +315,7 @@ class ChainFactory:
             collection_summary_chain = (
                 {"Information": RunnableLambda(lambda x: search_results[:16000])}
                 | PromptFactory.build_summarization_prompt()
-                | self.model35
+                | model
                 | StrOutputParser()
             )
             return collection_summary_chain

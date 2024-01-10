@@ -143,9 +143,9 @@ SUMMARIES section is from the customer. Provide any details like pricing or term
 decision. Don't say anything that we already said to the customer but always make a recommendation, 
 especially if it will help them avoid bill shock. Make just one really solid recommendation, rather than 
 several smaller ones. Focus on making the one best recommendation that you think is the most compelling and 
-will help the customer the most. Don't provide a phone number. Conclude with "Best regards,".
+will help the customer the most. However, if they ask a question, be sure to answer the question based on their information. In that case, it's okay to reply with two paragraphs, the first paragraph answering their question and the second paragraph giving them a recommendation. Don't provide a phone number. Conclude with "Best regards,".
 Try to be concise, but explain the reasons behind why your recommendation is well suited to them based on what you know about their personal circumstance.
-Keep the response to 4 sentences or less.
+Keep the response to 4 sentences or less. Additionally, make sure to give bullet points to any response that contains more than one item.
 
 Summaries:
 
