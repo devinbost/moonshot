@@ -293,7 +293,7 @@ def render_new(data_access: DataAccess, chatbot: Chatbot, crawler: Crawler):
 
     if len(user_chat_area) > 0 and searched:
         bot_response = chatbot.answer_customer(user_chat_area, user_info, col2)
-        bot_chat_area = col1.text_area(bot_response)
+        bot_chat_area = col1.markdown(bot_response)
 
 
 def render(data_access: DataAccess, app_name, chatbot: Chatbot, crawler):
