@@ -244,6 +244,37 @@ class Chatbot:
             for i in range(0, len(lst), chunk_size)
         ]
 
+    def answer_customer_from_records(
+        self, user_message: str, user_info: UserInfo, column: Any
+    ) -> str:
+        data_access: DataAccess = DataAccess()
+        model: ChatOpenAI = ChatOpenAI(model_name="gpt-4-1106-preview")
+        factory: ChainFactory = ChainFactory()
+
+        # Get TableSchema from table with specified name. (In this case, we know the table we want to query.)
+        tables = data_access.get_table_schemas_in_db_v2("")
+        table_schema = data_access.find_matching_table(
+            tables, "watsonx", "family_people"
+        )
+        # Needs to match on a user_id or something unique
+        select_with_where_chain = factory.build_select_with_where_chain(
+            data_access, model, table_schema
+        )
+        table_results: List[dict[str, Any]] = select_with_where_chain.invoke(
+            {"user_info_not_summary": user_info}
+        )  # (should contain a row with the person's siblings, parents, etc.)
+
+        # Pass that information into an ANN query that uses the
+
+        # Build CQL query for person record from user_info
+        if self.relevant_table_cache is None:
+            relevant_tables = self.get_relevant_tables_from_user_info(
+                data_access, model, user_info
+            )
+            self.relevant_table_cache = relevant_tables
+
+            # Run build_summarization_chain(..) but
+
     def answer_customer(
         self, user_message: str, user_info: UserInfo, column: Any
     ) -> str:
@@ -262,19 +293,8 @@ class Chatbot:
         model35: ChatOpenAI = ChatOpenAI(model_name="gpt-3.5-turbo-1106")
         self.log_response("Start", "Inspecting hundreds of tables in the database")
         if self.relevant_table_cache is None:
-            relevant_table_chain: Runnable = (
-                {
-                    "TableList": RunnableLambda(data_access.get_table_schemas_in_db_v2),
-                    "UserInfo": itemgetter("user_info_not_summary"),
-                }
-                | PromptFactory.build_table_identification_prompt()
-                | model
-                | StrOutputParser()
-                | RunnableLambda(PromptFactory.clean_string_v2)
-                | RunnableLambda(data_access.map_tables_and_populate)
-            )
-            relevant_tables: List[TableSchema] = relevant_table_chain.invoke(
-                {"user_info_not_summary": user_info}
+            relevant_tables = self.get_relevant_tables_from_user_info(
+                data_access, model, user_info
             )
             self.relevant_table_cache = relevant_tables
         factory: ChainFactory = ChainFactory()
@@ -426,6 +446,23 @@ class Chatbot:
             "Recommendation", f"Recommendation to the user is: {recommendation}"
         )
         return recommendation
+
+    def get_relevant_tables_from_user_info(self, data_access, model, user_info):
+        relevant_table_chain: Runnable = (
+            {
+                "TableList": RunnableLambda(data_access.get_table_schemas_in_db_v2),
+                "UserInfo": itemgetter("user_info_not_summary"),
+            }
+            | PromptFactory.build_table_identification_prompt()
+            | model
+            | StrOutputParser()
+            | RunnableLambda(PromptFactory.clean_string_v2)
+            | RunnableLambda(data_access.map_tables_and_populate)
+        )
+        relevant_tables: List[TableSchema] = relevant_table_chain.invoke(
+            {"user_info_not_summary": user_info}
+        )
+        return relevant_tables
 
     def get_real_keys(self, all_collection_keywords, deduped_segment_keywords):
         real_deduped_keys = {}

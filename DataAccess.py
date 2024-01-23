@@ -6,7 +6,7 @@ from cassandra.cluster import (
     ResultSet,
 )
 from cassandra.query import dict_factory
-from typing import List, Dict, Tuple, Any, Callable
+from typing import List, Dict, Tuple, Any, Callable, Optional, Set, Union
 from cassandra.auth import PlainTextAuthProvider
 import hashlib
 import os
@@ -25,7 +25,9 @@ from langchain.docstore.document import Document
 import ClassInspector
 from Config import config
 from pydantic_models.ComponentData import ComponentData
+from pydantic_models.Person import Person
 from langchain.vectorstores import AstraDB
+from pydantic_models.FamilyData import FamilyData
 
 from pydantic_models.TableDescription import TableDescription
 from pydantic_models.ColumnSchema import ColumnSchema
@@ -473,6 +475,28 @@ class DataAccess:
                     )
                 )
         return table_schemas
+
+    def find_matching_table(
+        self, table_schemas: List[TableSchema], keyspace_name: str, table_name: str
+    ) -> TableSchema:
+        """
+        Finds and returns the first TableSchema in the list that matches the given keyspace_name and table_name.
+
+        Parameters:
+            table_schemas (List[TableSchema]): A list of TableSchema objects.
+            keyspace_name (str): The name of the keyspace to match.
+            table_name (str): The name of the table to match.
+
+        Returns:
+            Optional[TableSchema]: The first matching TableSchema object, or None if no match is found.
+        """
+        for schema in table_schemas:
+            if (
+                schema.keyspace_name == keyspace_name
+                and schema.table_name == table_name
+            ):
+                return schema
+        raise Exception(f"No matching table found for: {keyspace_name}.{table_name}")
 
     def get_table_schemas(self, keyspace: str) -> List[TableSchema]:
         """
@@ -1044,25 +1068,24 @@ RESULTS:"""
 
         return filtered_search_func
 
+    def get_distinct_path_segments(session: Session, segment_key: str) -> List[str]:
+        """
+        Retrieve and return a list of distinct path segments for a given segment key from the default Cassandra keyspace.
+        Parameters:
+            session (Session): The Cassandra session to use for executing the query.
+            segment_key (str): The segment key for which to retrieve distinct path segments.
+        Returns:
+            List[str]: A list of distinct path segments for the given segment key.
+        """
+        # Adjust the query to use the specified segment key
+        query = SimpleStatement(
+            f"""SELECT query_text_values['metadata.{segment_key}'] FROM default_keyspace.sitemapls;"""
+        )
+        new_results = session.execute(query)
+        rows = new_results.all()
 
-def get_distinct_path_segments(session: Session, segment_key: str) -> List[str]:
-    """
-    Retrieve and return a list of distinct path segments for a given segment key from the default Cassandra keyspace.
-    Parameters:
-        session (Session): The Cassandra session to use for executing the query.
-        segment_key (str): The segment key for which to retrieve distinct path segments.
-    Returns:
-        List[str]: A list of distinct path segments for the given segment key.
-    """
-    # Adjust the query to use the specified segment key
-    query = SimpleStatement(
-        f"""SELECT query_text_values['metadata.{segment_key}'] FROM default_keyspace.sitemapls;"""
-    )
-    new_results = session.execute(query)
-    rows = new_results.all()
-
-    # Extract the distinct values using a set comprehension
-    distinct_values = {
-        getattr(row, f"query_text_values__metadata_{segment_key}") for row in rows
-    }
-    return list(distinct_values)
+        # Extract the distinct values using a set comprehension
+        distinct_values = {
+            getattr(row, f"query_text_values__metadata_{segment_key}") for row in rows
+        }
+        return list(distinct_values)

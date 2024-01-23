@@ -765,3 +765,37 @@ def get_chain_to_determine_if_table_might_be_relevant_to_user() -> PromptTemplat
 """
     )
     return PromptTemplate.from_template(prompt)
+
+
+def get_prompt_that_creates_code_docstring() -> PromptTemplate:
+    """
+    Creates a prompt template that summarizes the given code and creates a docstring with the summary and types.
+    Returns:
+        PromptTemplate: The prompt template for obtaining the docstring
+    """
+    prefix = get_helpful_assistant_prefix()
+    prompt = (
+        prefix
+        + """\n I will give you an example method in Python, and I want you to describe what it does and when it 
+        might be used, and I want you to write a docstring that contains this description, along with the types of 
+        any parameters and return values.
+        Here is the method:
+
+    {SourceCode}
+
+    RESPONSE:
+"""
+    )
+    return PromptTemplate.from_template(prompt)
+
+
+def get_prompt_that_narrates_family_story() -> PromptTemplate:
+    prompt = (
+        "Create a story from the following family history information. Include any relevant information you know about "
+        "what was happening in those areas at those times. Use markdown and make bold any major life-changing events "
+        "that might resonate personally with the reader."
+        ""
+        "FAMILY HISTORY INFORMATION:"
+        "{FamilyHistory}"
+    )
+    return PromptTemplate.from_template(prompt)

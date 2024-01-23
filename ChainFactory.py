@@ -32,31 +32,8 @@ class ChainFactory:
             Runnable: A runnable chain for table data summarization.
         """
 
-        def test_func(testme: Dict[str, Any]) -> Any:
-            print(testme)
-            print(table_schema)
-            user_props = testme["user_info_not_summary"]
-            return user_props
-
-        # top3_chain: Runnable = (
-        #     PromptFactory.build_select_query_for_top_three_rows_parallelizable(
-        #         table_schema
-        #     )
-        #     | model
-        #     | StrOutputParser()
-        #     | RunnableLambda(PromptFactory.clean_string_v2)
-        #     | RunnableLambda(data_access.exec_cql_query_simple)
-        # )
-        select_with_where_chain: Runnable = (
-            {
-                # "Top3Rows": top3_chain,
-                "PropertyInfo": test_func,  # Should be user properties of some kind
-            }
-            | PromptFactory.build_select_query_with_where_parallelizable(table_schema)
-            | model
-            | StrOutputParser()
-            | RunnableLambda(PromptFactory.clean_string_v2)
-            | RunnableLambda(data_access.exec_cql_query_simple)
+        select_with_where_chain = self.build_select_with_where_chain(
+            data_access, model, table_schema
         )
         table_summarization_chain: Runnable = (
             {"Information": select_with_where_chain}
@@ -66,6 +43,28 @@ class ChainFactory:
         )
         return table_summarization_chain
 
+    def build_select_with_where_chain(
+        self, data_access: DataAccess, model: ChatOpenAI, table_schema: TableSchema
+    ) -> Runnable[Dict[str, UserInfo], List[Dict[str, Any]]]:
+        def test_func(testme: Dict[str, Any]) -> Any:
+            print(testme)
+            print(table_schema)
+            user_props = testme["user_info_not_summary"]
+            return user_props
+
+        select_with_where_chain: Runnable[Dict[str, UserInfo], List[Dict[str, Any]]] = (
+            {
+                "PropertyInfo": test_func,  # Should be user properties of some kind
+            }
+            | PromptFactory.build_select_query_with_where_parallelizable(table_schema)
+            | model
+            | StrOutputParser()
+            | RunnableLambda(PromptFactory.clean_string_v2)
+            | RunnableLambda(data_access.exec_cql_query_simple)
+        )  # Runnable returns List[Dict[str, Any]] when invoked
+        return select_with_where_chain
+
+    @DeprecationWarning
     def build_summarization_chain_set(
         self, model: ChatOpenAI, data_access: DataAccess, tables: List[TableSchema]
     ) -> RunnableParallel:
@@ -133,6 +132,7 @@ class ChainFactory:
     #         for table in table_schemas
     #     ]
 
+    @DeprecationWarning
     def build_user_summarization_chain_parallelizable(
         self, data_access: DataAccess, model: ChatOpenAI, user_info: UserInfo
     ) -> RunnableParallel:

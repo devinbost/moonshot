@@ -296,6 +296,64 @@ def render_new(data_access: DataAccess, chatbot: Chatbot, crawler: Crawler):
         bot_chat_area = col1.markdown(bot_response)
 
 
+def render_new_family(data_access: DataAccess, chatbot: Chatbot, crawler: Crawler):
+    col1, col2 = st.columns(2)
+    if col1.checkbox("Preview Mode?", value=False):
+        build_reflection_menu(data_access, col1)
+        build_graph_display(col2, data_access)
+
+    user_info: UserInfo = UserInfo(
+        properties=[
+            PropertyInfo(property_name="age", property_type="int", property_value=30),
+            PropertyInfo(
+                property_name="name",
+                property_type="text",
+                property_value="John Smith",
+            ),
+            PropertyInfo(
+                property_name="siblings",
+                property_type="text",
+                property_value="Jane Smith, Josh Smith, Rick Smith, Ellis Smith",
+            ),
+            PropertyInfo(
+                property_name="parents",
+                property_type="text",
+                property_value="Hyatt Smith, Alice Higgins",
+            ),
+            PropertyInfo(
+                property_name="birth_date",
+                property_type="text",
+                property_value="Jan 24, 1860",
+            ),
+            PropertyInfo(
+                property_name="death_date",
+                property_type="text",
+                property_value="Oct 16, 1942",
+            ),
+            PropertyInfo(
+                property_name="birth_location",
+                property_type="text",
+                property_value="Kansas City, MO",
+            ),
+            PropertyInfo(
+                property_name="death_location",
+                property_type="text",
+                property_value="Provo, UT",
+            ),
+        ]
+    )
+    if col1.checkbox("Enable web crawler?", value=False):
+        setup_sitemap_crawler_ui(col2, crawler)
+    user_chat_area = col1.text_area("Enter message here")
+    searched = col1.button("Search")
+
+    if len(user_chat_area) > 0 and searched:
+        bot_response = chatbot.answer_customer_from_records(
+            user_chat_area, user_info, col2
+        )
+        bot_chat_area = col1.markdown(bot_response)
+
+
 def render(data_access: DataAccess, app_name, chatbot: Chatbot, crawler):
     col1, col2, col3 = st.columns(3)
     build_reflection_menu(data_access, col1)
