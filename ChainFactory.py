@@ -10,6 +10,8 @@ import PromptFactory
 from DataAccess import DataAccess
 from pydantic_models.TableSchema import TableSchema
 from pydantic_models.UserInfo import UserInfo
+import asyncio
+from FamilyCrawler import *
 
 
 class ChainFactory:
@@ -502,3 +504,24 @@ class ChainFactory:
             | StrOutputParser()
         )
         return final_chain
+
+    def build_family_summarization_chain(self, fs_url: str):
+        # Example of fs_url is: "https://ancestors.familysearch.org/en/LWM4-4PM/russell-a.-davies-1899-1983"
+        model = ChatOpenAI(model_name="gpt-4-1106-preview")
+
+        template = PromptFactory.get_prompt_that_narrates_family_story()
+        deep_extended_family_data = asyncio.run(
+            extract_deep_extended_family_data(fs_url)
+        )
+        from langchain_core.runnables import RunnableLambda, Runnable
+
+        summaries = consolidate_life_summaries(deep_extended_family_data)
+        print(summaries)
+        story_chain = (
+            {"Histories": RunnableLambda(lambda x: summaries)}
+            | template
+            | model
+            | StrOutputParser()
+        )
+        story_chain.invoke({})
+        return story_chain

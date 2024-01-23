@@ -518,3 +518,10 @@ class Chatbot:
             return summarization_of_topic
         else:
             return ""
+
+    def build_family_story(self, url: str):
+        # e.g. "https://ancestors.familysearch.org/en/LWM4-4PM/russell-a.-davies-1899-1983"
+        chain_factory = ChainFactory()
+        chain = chain_factory.build_family_summarization_chain(url)
+        result = chain.invoke({})
+        return result

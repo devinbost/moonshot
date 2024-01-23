@@ -791,11 +791,11 @@ def get_prompt_that_creates_code_docstring() -> PromptTemplate:
 
 def get_prompt_that_narrates_family_story() -> PromptTemplate:
     prompt = (
-        "Create a story from the following family history information. Include any relevant information you know about "
-        "what was happening in those areas at those times. Use markdown and make bold any major life-changing events "
-        "that might resonate personally with the reader."
-        ""
-        "FAMILY HISTORY INFORMATION:"
-        "{FamilyHistory}"
+        "Create a story from the following family history information. Include any relevant "
+        "information you know about what was happening in those areas at those times. Use markdown and make bold "
+        "any major life-changing events that might resonate personally with the reader. \n"
+        "HISTORIES:"
+        "{Histories}"
     )
-    return PromptTemplate.from_template(prompt)
+    template = PromptTemplate.from_template(prompt)
+    return template

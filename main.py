@@ -4,7 +4,7 @@ from Chatbot import Chatbot
 from Crawler import Crawler
 from DataAccess import DataAccess
 from SitemapCrawler import SitemapCrawler
-from UserInterface import UserInterface, render, render_new
+from UserInterface import UserInterface, render, render_new, render_new_family
 
 
 class Main:
@@ -35,7 +35,7 @@ class Main:
         ui = UserInterface(
             self.dataAccess, self.chatbot, self.crawler, self.sitemap_crawler
         )
-        render_new(ui.data_access, ui.chatbot, ui.crawler)
+        render_new_family(ui.data_access, ui.chatbot, ui.crawler)
 
 
 if __name__ == "__main__":
