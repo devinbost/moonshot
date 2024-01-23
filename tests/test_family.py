@@ -90,6 +90,27 @@ class TestData(unittest.TestCase):
         print(results)
         # Need to update Person record to include person's birth_date and death_date
 
+    def test_family_concatenation2(self):
+        db = AstraPyDB(
+            token=os.getenv("ASTRA_DB_TOKEN_BASED_PASSWORD"),
+            api_endpoint=os.getenv("ASTRA_DB_API_ENDPOINT"),
+        )
+        embedding_model = "all-MiniLM-L12-v2"
+        embedding_direct = SentenceTransformer(
+            "sentence-transformers/" + embedding_model
+        )
+
+        query_result = embedding_direct.encode("Laura A. Olding").tolist()
+        input_vector = query_result
+        collection = AstraDBCollection(collection_name="family_collection", astra_db=db)
+        results = collection.vector_find(
+            vector=input_vector,
+            filter={"metadata.recordType": {"$in": ["Mining Records"]}},
+            limit=10,
+        )
+        contents = [x["content"] for x in results]
+        print(contents)
+
     def test_family_concatenation_nlp(self):
         db = AstraPyDB(
             token=os.getenv("ASTRA_DB_TOKEN_BASED_PASSWORD"),
