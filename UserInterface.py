@@ -297,13 +297,11 @@ def render_new(data_access: DataAccess, chatbot: Chatbot, crawler: Crawler):
 
 
 def render_new_family(data_access: DataAccess, chatbot: Chatbot, crawler: Crawler):
-    col1 = st.columns(1)
-
-    url = col1.text_input("URL")
-    button = col1.button("Build Story")
+    url = st.text_input("URL")
+    button = st.button("Build Story")
     if button:
         story_result = chatbot.build_family_story(url)
-        bot_chat_area = col1.markdown(str(story_result))
+        bot_chat_area = st.markdown(str(story_result))
     # user_info: UserInfo = UserInfo(
     #     properties=[
     #         PropertyInfo(property_name="age", property_type="int", property_value=30),
