@@ -1,3 +1,5 @@
+import asyncio
+
 import streamlit as st
 from datetime import datetime
 import time
@@ -12,6 +14,10 @@ from ClassInspector import (
     get_class_method_params,
     get_class_attributes_from_llm,
 )
+from core.CollectionManager import CollectionManager
+from core.ConfigLoader import ConfigLoader
+from core.EmbeddingManager import EmbeddingManager
+from core.VectorStoreFactory import VectorStoreFactory
 from pydantic_models.ComponentData import ComponentData
 from DataAccess import DataAccess
 from pydantic_models.PropertyInfo import PropertyInfo
@@ -22,23 +28,37 @@ from pydantic_models.UserInfo import UserInfo
 class UserInterface:
     def __init__(
         self,
-        data_access: DataAccess,
         chatbot: Chatbot,
         crawler: Crawler,
         sitemap_crawler: SitemapCrawler,
     ):
         print("running __init__ on UserInterface")
         self.app_name = "Chatbot demo"
-        self.data_access = data_access
         self.chatbot = chatbot
         self.crawler = crawler
         self.sitemap_crawler = sitemap_crawler
+        embedding_manager = EmbeddingManager()
+        config_loader = ConfigLoader()
+        self.vector_store_factory = VectorStoreFactory(embedding_manager, config_loader)
+        self.astrapy_db = self.vector_store_factory.create_vector_store("AstraPyDB")
+        self.collection_manager = CollectionManager(self.astrapy_db, embedding_manager)
 
-    def generate_unique_id(self):
-        return str(datetime.utcnow())  # "test"  # str(uuid.uuid4())
-
-    def get_param_inputs(self):
-        NotImplementedError()
+    def setup_prompt_ui_components(self, column):
+        prompt_search = column.text_input("Find prompt")
+        matching_prompts = self.collection_manager.get_matching_prompts(prompt_search)
+        prompts = [s["prompt"] for s in matching_prompts]
+        question_list = column.selectbox("Select existing prompt", SortedSet(prompts))
+        load_prompt = column.button("Load prompt")
+        if load_prompt:
+            question = column.text_area(
+                "Ask a question for the chatbot", value=question_list
+            )
+        else:
+            question = column.text_area("Ask a question for the chatbot")
+        save_button = column.button("Save prompt")
+        if save_button:
+            self.collection_manager.save_prompt(question)
+        return question
 
 
 def build_param_inputs(
@@ -239,7 +259,13 @@ def setup_sitemap_crawler_ui(column, crawler: Crawler):
         start = time.time()
         # Check if empty
         sitemap_list = get_sitemap_list_from_csv(sitemaps)
-        crawler.async_crawl_and_ingest_list(sitemap_list, progress_bar, table_name)
+        embedding_manager = EmbeddingManager()
+        config_loader = ConfigLoader()
+        vector_store_factory = VectorStoreFactory(embedding_manager, config_loader)
+        vector_store = vector_store_factory.create_vector_store(
+            "AstraDB", collection_name=table_name
+        )
+        crawler.async_crawl_and_ingest_list(sitemap_list, progress_bar, vector_store)
         end = time.time()
         completion_time = end - start  # Time elapsed in seconds
         column.caption(f"Completed parsing docs in {completion_time} seconds")
@@ -292,78 +318,17 @@ def render_new(data_access: DataAccess, chatbot: Chatbot, crawler: Crawler):
     searched = col1.button("Search")
 
     if len(user_chat_area) > 0 and searched:
-        bot_response = chatbot.answer_customer(user_chat_area, user_info, col2)
-        bot_chat_area = col1.markdown(bot_response)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(
+                chatbot.answer_customer(user_chat_area, user_info, col2, col1)
+            )
+        finally:
+            loop.close()
 
-
-def render(data_access: DataAccess, app_name, chatbot: Chatbot, crawler):
-    col1, col2, col3 = st.columns(3)
-    build_reflection_menu(data_access, col1)
-
-    # Build graph from data structure here:
-    graph = Digraph(comment="Component Graph")
-    data_map = data_access.get_data_map()
-    updated_graph = data_access.build_graph(data_map, graph)
-    col2.graphviz_chart(updated_graph)
-    python_code = data_access.generate_python_code()
-    col2.markdown(python_code)
-    print("Running render")
-    col3.title(app_name)
-
-    question = setup_prompt_ui_components(col3, data_access)
-    ann_terms = col3.text_input("Terms for ANN")
-    searched = col3.button("Search")
-    if len(question) > 0 and searched:
-        bot_response = chatbot.run_inference_astrapy(
-            terms_for_ann=ann_terms,
-            ann_length=5,
-            collection="langchain_demo1",
-            question=question,
-        )
-        if bot_response:
-            col3.write(bot_response)
-    search_via_query = col3.button("Query")
-    desc1 = TableDescription(
-        table_name="support_cases",
-        column_name="phonenumber",
-        description="For user's cell phone, which is a user ID",
-    )
-    desc2 = TableDescription(
-        table_name="support_cases",
-        column_name="case_transcript",
-        description="Contains support transcript for a given case / ticket",
-    )
-    desc3 = TableDescription(
-        table_name="user_plan",
-        column_name="phonenumber",
-        description="For user's cell phone, which is a user ID",
-    )
-    desc4 = TableDescription(
-        table_name="user_plan",
-        column_name="plan_details",
-        description="Describes the plan information",
-    )
-    table_descriptions = [desc1, desc2, desc3, desc4]
-
-    if search_via_query:
-        data_access.summarize_relevant_tables(
-            user_messages=f"USER QUESTION: {question} \n"
-            + " \n \n USER CONTEXT: {userID: 1354, phone: 'galaxy s22', plan: 'unlimited', phonenumber: '238-345-7823'}",
-            tables=table_descriptions,
-        )
-    sitemaps = col3.text_input(
-        "Sitemap URLs to crawl as csv"
-    )  # To do: Handle this input better
-    table_name = col3.text_input("Collection to store data")
-    if col3.button("Crawl docs"):
-        progress_bar = col3.progress(0, "Percentage completion of site crawling")
-        start = time.time()
-        # Check if empty
-        sitemap_list = get_sitemap_list_from_csv(sitemaps)
-        crawler.async_crawl_and_ingest_list(sitemap_list, progress_bar, table_name)
-        end = time.time()
-        completion_time = end - start  # Time elapsed in seconds
-        col3.caption(f"Completed parsing docs in {completion_time} seconds")
+        # bot_response = chatbot.answer_customer(user_chat_area, user_info, col2)
+        # bot_chat_area = col1.markdown(bot_response)
 
 
 def build_graph_display(col2, data_access):
@@ -384,21 +349,3 @@ def get_sitemap_list_from_csv(sitemaps):
         # If the string is empty, return an empty list
         cleaned_list = []
     return cleaned_list
-
-
-def setup_prompt_ui_components(column, data_access):
-    prompt_search = column.text_input("Find prompt")
-    matching_prompts = data_access.get_matching_prompts(prompt_search)
-    prompts = [s["prompt"] for s in matching_prompts]
-    question_list = column.selectbox("Select existing prompt", SortedSet(prompts))
-    load_prompt = column.button("Load prompt")
-    if load_prompt:
-        question = column.text_area(
-            "Ask a question for the chatbot", value=question_list
-        )
-    else:
-        question = column.text_area("Ask a question for the chatbot")
-    save_button = column.button("Save prompt")
-    if save_button:
-        data_access.save_prompt(question)
-    return question

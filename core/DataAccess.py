@@ -1,9 +1,9 @@
+import asyncio
 import logging
 
 from cassandra.cluster import (
     Cluster,
     Session,
-    ResultSet,
 )
 from cassandra.query import dict_factory
 from typing import List, Dict, Tuple, Any, Callable
@@ -17,44 +17,65 @@ from graphviz import Digraph
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Cassandra
-import wget
 import pandas as pd
-from pandas._typing import ArrayLike
 from sentence_transformers import SentenceTransformer
-from langchain.docstore.document import Document
 import ClassInspector
-from Config import config
+from core.CollectionManager import CollectionManager
+from core.ConfigLoader import ConfigLoader
+from core.EmbeddingManager import EmbeddingManager
+from core.VectorStoreFactory import VectorStoreFactory
 from pydantic_models.ComponentData import ComponentData
 from langchain.vectorstores import AstraDB
 
 from pydantic_models.TableDescription import TableDescription
 from pydantic_models.ColumnSchema import ColumnSchema
-from pydantic_models.TableKey import TableKey
 from pydantic_models.TableSchema import TableSchema
 
 
 class DataAccess:
-    def __init__(self) -> None:
+    # def __init__(self) -> None:
+    #     """
+    #     Initialize the DataAccess class, setting up various configurations for environment variables,
+    #     embeddings, database, and API.
+    #     """
+    #     self.vector_store = None
+    #     self.output_variables = ["new"]
+    #     self.data_map = {}
+    #     self._initialize_environment_variables()
+    #     self._initialize_embeddings()
+    #     self._initialize_database_configuration()
+    #     self.astrapy_db = AstraPyDB(token=self.token, api_endpoint=self.api_endpoint)
+    def __init__(
+        self,
+        config_loader: ConfigLoader,
+        embedding_manager: EmbeddingManager,
+        vector_store_factory: VectorStoreFactory,
+    ):
         """
-        Initialize the DataAccess class, setting up various configurations for environment variables,
-        embeddings, database, and API.
+        Initialize the DataAccess class.
+
+        This constructor initializes the DataAccess class with necessary configuration,
+        embedding management, and vector store factory instances. It sets up the AstraPyDB
+        connection using the vector store factory and creates a CollectionManager instance.
+        It also initializes output variables and a data map for further operations.
+
+        Parameters:
+        - config_loader (ConfigLoader): An instance of ConfigLoader to load necessary configurations.
+        - embedding_manager (EmbeddingManager): An instance of EmbeddingManager to manage embeddings used in the class.
+        - vector_store_factory (VectorStoreFactory): An instance of VectorStoreFactory to create and manage vector stores.
+
+        The method should be used when an instance of DataAccess is required. It ensures that all
+        necessary components for data access are properly initialized and configured.
         """
-        self.vector_store = None
+        self.config_loader = config_loader
+        self.embedding_manager = embedding_manager
+        self.vector_store_factory = vector_store_factory
+        self.astrapy_db = self.vector_store_factory.create_vector_store("AstraPyDB")
+        self.collection_manager = CollectionManager(
+            self.astrapy_db, self.embedding_manager
+        )
         self.output_variables = ["new"]
         self.data_map = {}
-        self._initialize_environment_variables()
-        self._initialize_embeddings()
-        self._initialize_database_configuration()
-        self._initialize_api_configuration()
-
-    def _initialize_environment_variables(self) -> None:
-        """
-        Set up environment variables for keyspace, table name, and database name from the system environment,
-        providing default values if not set.
-        """
-        self.keyspace = os.getenv("KEYSPACE_NAME", "keyspace")
-        self.table_name = os.getenv("TABLE_NAME", "table")
-        self.database_name = os.getenv("DATABASE_NAME", "database")
 
     def _initialize_embeddings(self) -> None:
         """
@@ -72,39 +93,11 @@ class DataAccess:
             is_separator_regex=False,
         )
 
-    def _initialize_database_configuration(self) -> None:
-        """
-        Set up database configuration by obtaining the secure bundle path and setting up the vector store.
-        """
-        self.secure_bundle_path = config.get_secure_bundle_full_path()
-        self.vector_store = self._setupVectorStore()
-
-    def _initialize_api_configuration(self) -> None:
-        """
-        Initialize API configuration by loading OpenAI secrets from a JSON file and setting up the AstraPyDB instance.
-        """
-        with open(config.openai_json) as f:
-            secrets = json.load(f)
-        self.token = secrets[
-            "token"
-        ]  # In production, it's better to only load the secrets as needed (and have them always encrypted except when needed), but this is okay for now.
-        self.api_endpoint = secrets["endpoint"]
-        self.astrapy_db = AstraPyDB(token=self.token, api_endpoint=self.api_endpoint)
-
     def getCqlSession(self) -> Session:
         """
         Create and return a Cassandra Query Language (CQL) session with the configured secure bundle and authentication.
         """
-        cluster = Cluster(
-            cloud={
-                "secure_connect_bundle": self.secure_bundle_path,
-            },
-            auth_provider=PlainTextAuthProvider(
-                "token",
-                os.getenv("ASTRA_DB_TOKEN_BASED_PASSWORD"),
-            ),
-        )
-
+        cluster = self.vector_store_factory.create_vector_store("Cluster")
         astra_session = cluster.connect()
         return astra_session
 
@@ -116,43 +109,8 @@ class DataAccess:
         Returns:
             AstraDB: An instance of AstraDB configured with the specified collection.
         """
-        cassandraVectorStore = AstraDB(
-            embedding=self.embeddings,
-            collection_name=collection,  # Replace with your collection name
-            token=os.getenv(
-                "ASTRA_DB_TOKEN_BASED_PASSWORD"
-            ),  # Replace with your AstraDB token
-            api_endpoint=self.api_endpoint,  # Replace with your AstraDB API endpoint
-        )
-        return cassandraVectorStore
-
-    @DeprecationWarning
-    def _setup_vector_store(self, table_name: str) -> Cassandra:
-        """
-        Set up a vector store in Cassandra with the given table name, using the initialized embeddings and CQL session.
-        Parameters:
-            table_name (str): The name of the table to be used in the vector store.
-        Returns:
-            Cassandra: A Cassandra vector store instance.
-        """
-        return Cassandra(
-            embedding=self.embeddings,
-            session=self.getCqlSession(),
-            keyspace=self.keyspace,
-            table_name=table_name,
-        )
-
-    def _setupVectorStore(self) -> Cassandra:
-        """
-        Set up a default vector store in Cassandra using the initialized embeddings, CQL session, and class variables for keyspace and table name.
-        Returns:
-            Cassandra: A Cassandra vector store instance with default configuration.
-        """
-        return Cassandra(
-            embedding=self.embeddings,
-            session=self.getCqlSession(),
-            keyspace=self.keyspace,
-            table_name=self.table_name,
+        return self.vector_store_factory.create_vector_store(
+            "AstraDB", collection_name=collection
         )
 
     def getVectorStore(self, table_name: str) -> Cassandra:
@@ -164,34 +122,6 @@ class DataAccess:
             Cassandra: A Cassandra vector store instance for the specified table name.
         """
         return self.setupVectorStoreNew(table_name)
-
-    def loadWikipediaData(self) -> None:
-        """
-        Load and process Wikipedia data from a CSV file, parsing each row and adding it to the vector store.
-        """
-        url = "https://raw.githubusercontent.com/GeorgeCrossIV/Langchain-Retrieval-Augmentation-with-CASSIO/main/20220301.simple.csv"
-        sample_data = config.data_path + "/20220301.simple.csv"
-
-        if not os.path.isfile(sample_data):
-            wget.download(url)
-        data = pd.read_csv(sample_data)
-        data = data.head(10)
-        data = data.rename(columns={"text ": "text"})
-        for index, row in data.iterrows():
-            self._parseWikipediaRow(row)
-
-    def _parseWikipediaRow(self, row) -> None:
-        """
-        Parse an individual row from the Wikipedia data, creating a document and adding it to the vector store after splitting the text.
-        Parameters:
-            row: A row of data from the Wikipedia dataset.
-        """
-        metadata = {"url": row["url"], "title": row["title"]}
-        page_content = row["text"]
-
-        wikiDocument = Document(page_content=page_content, metadata=metadata)
-        wikiDocs = self.splitter.transform_documents([wikiDocument])
-        self.vector_store.add_documents(wikiDocs)
 
     def get_output_variable_names(self) -> List[str]:
         """
@@ -296,22 +226,6 @@ class DataAccess:
         else:
             return ""
 
-    def exec_cql_query(self, keyspace: str, query: str) -> List[Dict[str, Any]]:
-        """
-        Execute a CQL query in the specified keyspace and return the results as a list of dictionaries.
-        Parameters:
-            keyspace (str): The keyspace in which the query is to be executed.
-            query (str): The CQL query to execute.
-        Returns:
-            List[Dict[str, Any]]: A list of dictionaries representing the query results.
-        """
-        session: Session = self.getCqlSession()
-        session.set_keyspace(keyspace)
-        query_stmt = SimpleStatement(query)
-        session.row_factory = dict_factory
-        rows: List[dict] = session.execute(query_stmt).all()
-        return rows
-
     def exec_cql_query_simple(self, query: str) -> List[Dict[str, Any]]:
         """
         Execute a simple CQL query without specifying a keyspace and return the results as a list of dictionaries.
@@ -328,18 +242,28 @@ class DataAccess:
         print(rows)
         return rows
 
-    def get_cql_table_description(self, table_schema: TableSchema) -> str:
+    async def exec_cql_query_simple_async(self, query: str) -> List[Dict[str, Any]]:
         """
-        Retrieve and return the description of a CQL table using its schema.
+        Execute a simple CQL query without specifying a keyspace and return the results as a list of dictionaries.
         Parameters:
-            table_schema (TableSchema): The schema of the table for which the description is to be retrieved.
+            query (str): The CQL query to execute.
         Returns:
-            str: The description of the specified CQL table.
+            List[Dict[str, Any]]: A list of dictionaries representing the query results.
         """
-        output = self.exec_cql_query_simple(
-            f"describe {table_schema.keyspace_name}.{table_schema.table_name};"
-        )
-        return output
+        print(query)
+        session: Session = self.getCqlSession()
+        query_stmt = SimpleStatement(query)
+        session.row_factory = dict_factory
+        response_future = session.execute_async(query_stmt)
+        try:
+            rows = response_future.result()
+            # Await the completion of the query
+            return (
+                rows.current_rows
+            )  # Use the current_rows attribute to get the results
+        except Exception as e:
+            logging.error(f"Error executing async CQL query: {e}")
+            return []
 
     def get_cql_table_columns(self, table_schema: TableSchema) -> List[ColumnSchema]:
         """
@@ -369,16 +293,18 @@ class DataAccess:
         ]
         return table_columns
 
-    def get_cql_table_keys(self, table_schema: TableSchema) -> List[ColumnSchema]:
+    async def get_cql_table_columns_async(
+        self, table_schema: TableSchema
+    ) -> List[ColumnSchema]:
         """
-        Retrieve and return a list of key column schemas for the specified CQL table schema.
+        Retrieve and return a list of column schemas for the specified CQL table schema.
         Parameters:
-            table_schema (TableSchema): The schema of the table for which key column schemas are to be retrieved.
+            table_schema (TableSchema): The schema of the table for which column schemas are to be retrieved.
         Returns:
-            List[ColumnSchema]: A list of key column schemas for the specified table.
+            List[ColumnSchema]: A list of column schemas for the specified table.
         """
         query = f"SELECT * FROM system_schema.columns WHERE keyspace_name = '{table_schema.keyspace_name}' AND table_name = '{table_schema.table_name}';"
-        output = self.exec_cql_query_simple(query)
+        output = await self.exec_cql_query_simple_async(query)
         table_columns = [
             ColumnSchema(
                 **{
@@ -393,7 +319,7 @@ class DataAccess:
                 }
             )
             for item in output
-            if item["kind"] != "regular"
+            # if item["kind"] == "regular"
         ]
         return table_columns
 
@@ -411,28 +337,19 @@ class DataAccess:
         names = [idx["index_name"] for idx in output]
         return names
 
-    def get_table_schemas_in_db(self) -> List[TableSchema]:
+    async def get_cql_table_indexes_async(self, table_schema: TableSchema) -> List[str]:
         """
-        Duplicate?
+        Retrieve and return a list of index names for the specified CQL table schema.
+        Parameters:
+            table_schema (TableSchema): The schema of the table for which index names are to be retrieved.
+        Returns:
+            List[str]: A list of index names for the specified table.
         """
-        session: Session = self.getCqlSession()
-        rows = session.execute("SELECT table_name FROM system_schema.tables;")
-        table_schemas: List[TableSchema] = []
-        for row in rows:
-            table_name: str = row.table_name
-            table_schema = session.execute(
-                f"SELECT * FROM system_schema.columns WHERE keyspace_name = '{keyspace}' AND table_name = '{table_name}'"
-            )
-            columns = [
-                ColumnSchema(column_name=col.column_name, column_type=col.type)
-                for col in table_schema
-            ]
-            table_schemas.append(
-                TableSchema(
-                    table_name=table_name, keyspace_name=keyspace, columns=columns
-                )
-            )
-        return table_schemas
+        output = self.exec_cql_query_simple(
+            f"SELECT * FROM system_schema.indexes WHERE keyspace_name = '{table_schema.keyspace_name}' AND table_name = '{table_schema.table_name}';"
+        )
+        names = [idx["index_name"] for idx in output]
+        return names
 
     def get_table_schemas_in_db_v2(self, empty: str) -> List[TableSchema]:
         """
@@ -474,36 +391,54 @@ class DataAccess:
                 )
         return table_schemas
 
-    def get_table_schemas(self, keyspace: str) -> List[TableSchema]:
+    async def get_table_schemas_in_db_v2_async(self, empty: str) -> List[TableSchema]:
         """
-        Retrieve and return a list of table schemas for all tables in the specified keyspace of the connected Cassandra database.
+        Retrieve and return a list of table schemas for all tables in the connected Cassandra database, excluding system tables.
         Parameters:
-            keyspace (str): The keyspace in which to retrieve table schemas.
+            empty (str): A string parameter (unused in the current implementation).
         Returns:
-            List[TableSchema]: A list of table schemas for all tables in the specified keyspace.
+            List[TableSchema]: A list of table schemas for non-system tables in the database.
         """
+        print(empty)
         session: Session = self.getCqlSession()
-        session.set_keyspace(keyspace)
-        rows = session.execute(
-            "SELECT table_name FROM system_schema.tables WHERE keyspace_name = %s",
-            [keyspace],
+        response_future = session.execute_async(
+            "SELECT keyspace_name, table_name FROM system_schema.tables;"
         )
-        table_schemas: List[TableSchema] = []
-        for row in rows:
-            table_name: str = row.table_name
-            table_schema = session.execute(
-                f"SELECT * FROM system_schema.columns WHERE keyspace_name = '{keyspace}' AND table_name = '{table_name}'"
-            )
-            columns = [
-                ColumnSchema(column_name=col.column_name, column_type=col.type)
-                for col in table_schema
-            ]
-            table_schemas.append(
-                TableSchema(
-                    table_name=table_name, keyspace_name=keyspace, columns=columns
-                )
-            )
-        return table_schemas
+        try:
+            table_entries = response_future.result()
+            # Await the completion of the query
+            table_schemas: List[TableSchema] = []
+            for row in table_entries.current_rows:  # Use the current_rows attribute
+                table_name: str = row.table_name
+                keyspace_name: str = row.keyspace_name
+                if "system" not in keyspace_name:
+                    response_future_columns = session.execute_async(
+                        f"SELECT * FROM system_schema.columns WHERE keyspace_name = '{keyspace_name}' AND table_name = '{table_name}'"
+                    )
+                    columns_result = (
+                        response_future_columns.result()
+                    )  # Await the completion of the query for columns
+                    columns = [
+                        ColumnSchema(
+                            column_name=col.column_name,
+                            type=col.type,
+                            clustering_order=col.clustering_order,
+                            kind=col.kind,
+                            position=col.position,
+                        )
+                        for col in columns_result.current_rows  # Use the current_rows attribute
+                    ]
+                    table_schemas.append(
+                        TableSchema(
+                            table_name=table_name,
+                            keyspace_name=keyspace_name,
+                            columns=columns,
+                        )
+                    )
+            return table_schemas
+        except Exception as e:
+            logging.error(f"Error executing async CQL query: {e}")
+            return []
 
     def get_first_three_rows(
         self, table_schemas: List[TableSchema]
@@ -527,22 +462,6 @@ class DataAccess:
                 for row in rows
             ]
         return table_schemas
-
-    def get_table_schemas_in_db(self) -> List[TableSchema]:
-        """
-        Duplicate?
-        """
-        output = self.exec_cql_query_simple(
-            "SELECT keyspace_name, table_name FROM system_schema.tables"
-        )
-        tables = [
-            TableSchema(**{key: item[key] for key in ["keyspace_name", "table_name"]})
-            for item in output
-            if "system" not in item["keyspace_name"]
-        ]
-        for table in tables:
-            self.set_table_metadata(table)
-        return tables
 
     # Use the following method only as a fallback in case the LLM can't get this info for some reason
     def get_table_schemas_that_contain_user_properties(
@@ -626,101 +545,6 @@ class DataAccess:
                 code_snippets.append(code_line)
 
         return "\n".join(code_snippets)
-
-    def save_prompt(self, prompt: str) -> None:
-        """
-        Save a given prompt to the AstraDB collection 'prompts', encoding the prompt using embeddings and generating a unique identifier.
-        Parameters:
-            prompt (str): The prompt to be saved in the database.
-        """
-        mycollections = self.astrapy_db.get_collections()["status"]["collections"]
-        if "prompts" not in mycollections:
-            collection = self.astrapy_db.create_collection(
-                collection_name="prompts", dimension=384
-            )
-        else:
-            collection = AstraDBCollection(
-                collection_name="prompts", astra_db=self.astrapy_db
-            )
-        # Workaround due to strange uuid bug:
-        prompt_hash = hashlib.md5(prompt.encode()).hexdigest()
-        vector = self.embedding_direct.encode(prompt).tolist()
-        collection.insert_one({"_id": prompt_hash, "prompt": prompt, "$vector": vector})
-
-    def get_matching_prompts(self, match: str) -> List[Dict[str, Any]]:
-        """
-        Retrieve and return matching prompts from the AstraDB collection 'prompts' based on the similarity to the given match string.
-        Parameters:
-            match (str): The string to match against the stored prompts.
-        Returns:
-            List[Dict[str, Any]]: A list of prompts from the database that closely match the given string.
-        """
-        mycollections = self.astrapy_db.get_collections()["status"]["collections"]
-        if "prompts" not in mycollections:
-            collection = self.astrapy_db.create_collection(
-                collection_name="prompts", dimension=384
-            )
-        else:
-            collection = AstraDBCollection(
-                collection_name="prompts", astra_db=self.astrapy_db
-            )
-        vector = self.embedding_direct.encode(match).tolist()
-        results = collection.vector_find(vector, limit=10)
-        return results
-        # Query DB for prompts
-
-    def get_user_profile(
-        self, table_names: List[str], phone_number: str
-    ) -> List[TableDescription]:
-        """
-        Retrieve and return a list of table descriptions relevant to the user, identified by phone number, from the specified table names.
-        Parameters:
-            table_names (List[str]): A list of table names to query.
-            phone_number (str): The phone number to use as a filter in the queries.
-        Returns:
-            List[TableDescription]: A list of table descriptions relevant to the user.
-        """
-        combined_results = []
-        session = self.getCqlSession()
-        for table_name in table_names:
-            query = f"SELECT * FROM {table_name} WHERE phone_number = %s"
-            try:
-                rows = session.execute(query, [phone_number])
-                for row in rows:
-                    combined_results.append(
-                        TableDescription(table_name=table_name, **row)
-                    )
-            except Exception as e:
-                print(f"Error querying table {table_name}: {e}")
-        return combined_results
-
-    def get_relevant_tables(
-        self, tables: List[TableDescription], user_messages: str
-    ) -> str:
-        """
-        Determine and return relevant tables based on user messages and a list of table descriptions, using a predefined prompt template.
-        Parameters:
-            tables (List[TableDescription]): A list of table descriptions.
-            user_messages (str): User messages to be used for determining relevance.
-        Returns:
-            str: A JSON list of tables most likely to be relevant to the user's request.
-        """
-        prompt_template = f"""You're a helpful assistant. Don't give an explanation or summary. I'll give you a list of tables, columns and descriptions, and I want you to determine which tables are most likely to be relevant to the user's request. Then, return them as a JSON list. 
-
-TABLES:
-{tables}
-
-
-USER INFORMATION:
-
-{user_messages}
-RESULTS:
-"""
-        chain = ClassInspector.build_prompt_from_template(prompt_template)
-        result = chain.invoke({})
-        clean_result = ClassInspector.remove_json_formatting(result)
-        result_as_json = json.loads(clean_result)
-        return clean_result
 
     def summarize_relevant_tables(
         self, tables: List[TableDescription], user_messages: str
@@ -837,23 +661,7 @@ RESULTS:"""
         clean_result = ClassInspector.remove_json_formatting(result)
         return clean_result
 
-    def map_tables(self, json_string: str) -> List[TableSchema]:
-        """
-        Convert a JSON string to a list of TableSchema objects.
-        Parameters:
-            json_string (str): A JSON string representing table schemas.
-        Returns:
-            List[TableSchema]: A list of TableSchema objects derived from the JSON string.
-        """
-        data = json.loads(json_string)
-        table_schemas = [
-            TableSchema(
-                keyspace_name=obj["keyspace_name"], table_name=obj["table_name"]
-            )
-            for obj in data
-        ]
-        return table_schemas
-
+    @DeprecationWarning
     def map_tables_and_populate(self, json_string: str) -> List[TableSchema]:
         """
         Convert a JSON string to a list of populated TableSchema objects.
@@ -874,27 +682,32 @@ RESULTS:"""
         ]
         return populated
 
-    def filter_matching_tables(
-        self, source_tables: List[TableSchema], target_tables: List[TableSchema]
+    async def map_tables_and_populate_async(
+        self, json_string: str
     ) -> List[TableSchema]:
         """
-        Filter and return tables from source_tables that match the keyspace and table name in target_tables.
+        Convert a JSON string to a list of populated TableSchema objects.
         Parameters:
-            source_tables (List[TableSchema]): A list of table schemas to filter from.
-            target_tables (List[TableSchema]): A list of target table schemas to match against.
+            json_string (str): A JSON string representing table schemas.
         Returns:
-            List[TableSchema]: A list of filtered table schemas that match the target tables.
+            List[TableSchema]: A list of populated TableSchema objects derived from the JSON string.
         """
-        # Creating set for improved matching performance:
-        target_set = {
-            (table.keyspace_name, table.table_name) for table in target_tables
-        }
-        filtered_tables = [
-            table
-            for table in source_tables
-            if (table.keyspace_name, table.table_name) in target_set
+        data = json.loads(json_string)
+        table_schemas = [
+            TableSchema(
+                keyspace_name=obj["keyspace_name"], table_name=obj["table_name"]
+            )
+            for obj in data
         ]
-        return filtered_tables
+
+        # Create coroutines for each set_table_metadata_and_return_async call
+        coroutines = [
+            self.set_table_metadata_and_return_async(table) for table in table_schemas
+        ]
+
+        # Await all coroutines to complete and return their results
+        populated = await asyncio.gather(*coroutines)
+        return populated
 
     def get_relevant_columns(
         self, table_descriptions: List[TableDescription]
@@ -920,17 +733,6 @@ RESULTS:"""
         column_name_list = [item["column_name"] for item in columns_as_json]
         return column_name_list
 
-    def set_table_metadata(self, table_schema: TableSchema) -> None:
-        """
-        Set metadata for the given table schema, including indexes and columns.
-        Parameters:
-            table_schema (TableSchema): The table schema for which metadata is to be set.
-        """
-        indexes = self.get_cql_table_indexes(table_schema)
-        columns = self.get_cql_table_columns(table_schema)
-        table_schema.indexes = indexes
-        table_schema.columns = columns
-
     def set_table_metadata_and_return(self, table_schema: TableSchema) -> TableSchema:
         """
         Set metadata for the given table schema and return the updated schema.
@@ -945,6 +747,23 @@ RESULTS:"""
         table_schema.columns = columns
         return table_schema
 
+    async def set_table_metadata_and_return_async(
+        self, table_schema: TableSchema
+    ) -> TableSchema:
+        """
+        Set metadata for the given table schema and return the updated schema.
+        Parameters:
+            table_schema (TableSchema): The table schema for which metadata is to be set.
+        Returns:
+            TableSchema: The updated table schema with set metadata.
+        """
+        indexes = await self.get_cql_table_indexes_async(table_schema)
+        columns = await self.get_cql_table_columns_async(table_schema)
+        table_schema.indexes = indexes
+        table_schema.columns = columns
+        return table_schema
+
+    @DeprecationWarning
     def get_path_segment_keywords(self) -> Dict[str, List[str]]:
         """
         Retrieve and return a dictionary of distinct path segment keywords from the default Cassandra keyspace.
@@ -989,80 +808,51 @@ RESULTS:"""
         }
         return distinct_values_dict
 
-    def filtered_ANN_search(
-        self, collection_filter: Dict[str, str], user_summary: Any
-    ) -> str:
+    async def get_path_segment_keywords_async(self) -> Dict[str, List[str]]:
         """
-        Perform an Approximate Nearest Neighbor (ANN) search with a filter and user summary, returning the results as a JSON string.
-        Parameters:
-            collection_filter (Dict[str, str]): A dictionary to filter the collection.
-            user_summary (Any): A summary provided by the user, used in the search query.
+        Retrieve and return a dictionary of distinct path segment keywords from the default Cassandra keyspace.
         Returns:
-            str: A JSON string representing the search results.
+            Dict[str, List[str]]: A dictionary where each key is a metadata path segment and the value is a list of distinct keywords.
         """
-        user_summary_string = json.dumps(user_summary)
-        input_vector: List[float] = self.embedding_direct.encode(
-            user_summary_string
-        ).tolist()
-        collection = AstraDBCollection(
-            collection_name="sitemapls", astra_db=self.astrapy_db
+        query = SimpleStatement(
+            f"""SELECT query_text_values['metadata.subdomain'] as subdomain,
+         query_text_values['metadata.path_segment_1'] as seg1,
+         query_text_values['metadata.path_segment_2'] as seg2,
+         query_text_values['metadata.path_segment_3'] as seg3,
+         query_text_values['metadata.path_segment_4'] as seg4,
+         query_text_values['metadata.path_segment_5'] as seg5,
+         query_text_values['metadata.path_segment_6'] as seg6,
+         query_text_values['metadata.title'] as title,
+         query_text_values['metadata.nlp_keywords'] as keywords
+         FROM default_keyspace.sitemapls;"""
         )
+        session = self.getCqlSession()
+        # execute the query
+        session.default_timeout = 120
+        response_future = session.execute_async(query)
         try:
-            results: List[Dict[str, Any]] = collection.vector_find(
-                vector=input_vector,
-                filter=collection_filter,
-                limit=20,
-            )
-            results_as_string = json.dumps(results)
-            return results_as_string
-        except Exception as ex:
-            logging.error("Error reading from DB. Exception: " + str(ex))
-
-    def filtered_ANN_search_maker(
-        self, user_summary: dict[str, str]
-    ) -> Callable[[dict[str, str]], list[dict[str, Any]]]:
-        """
-        Create and return a function that performs a filtered Approximate Nearest Neighbor (ANN) search.
-        Parameters:
-            user_summary (dict[str, str]): A dictionary representing the user summary.
-        Returns:
-            Callable[[dict[str, str]], list[dict[str, Any]]]: A function that takes a collection filter and returns a list of search results.
-        """
-
-        def filtered_search_func(collection_filter: dict[str, str]):
-            user_summary_string = json.dumps(user_summary)
-            input_vector = self.embedding_direct.encode(user_summary_string).tolist()
-            collection = AstraDBCollection(
-                collection_name="sitemapls", astra_db=self.astrapy_db
-            )
-            results = collection.vector_find(
-                vector=input_vector,
-                filter=collection_filter,
-                limit=100,
-            )
-            return results
-
-        return filtered_search_func
-
-
-def get_distinct_path_segments(session: Session, segment_key: str) -> List[str]:
-    """
-    Retrieve and return a list of distinct path segments for a given segment key from the default Cassandra keyspace.
-    Parameters:
-        session (Session): The Cassandra session to use for executing the query.
-        segment_key (str): The segment key for which to retrieve distinct path segments.
-    Returns:
-        List[str]: A list of distinct path segments for the given segment key.
-    """
-    # Adjust the query to use the specified segment key
-    query = SimpleStatement(
-        f"""SELECT query_text_values['metadata.{segment_key}'] FROM default_keyspace.sitemapls;"""
-    )
-    new_results = session.execute(query)
-    rows = new_results.all()
-
-    # Extract the distinct values using a set comprehension
-    distinct_values = {
-        getattr(row, f"query_text_values__metadata_{segment_key}") for row in rows
-    }
-    return list(distinct_values)
+            results = response_future.result()
+            # Await the completion of the query
+            # Convert results to a DataFrame
+            df = pd.DataFrame(results.current_rows)  # Use the current_rows attribute
+            # distinct_seg1 = df["seg1"].unique().tolist()
+            filtered_df = df[
+                ~df["seg2"].str.contains("knowledge-base", na=False)
+                & ~df["seg2"].str.contains("legal", na=False)
+            ]
+            distinct_seg2 = [x for x in filtered_df["seg2"].unique() if x is not None]
+            distinct_seg3 = [x for x in df["seg3"].unique() if x is not None]
+            distinct_seg4 = [x for x in df["seg4"].unique() if x is not None]
+            # distinct_seg5 = df["seg5"].unique().tolist()
+            # distinct_seg6 = df["seg6"].unique().tolist()
+            distinct_values_dict = {
+                "metadata.path_segment_2": distinct_seg2,
+                "metadata.path_segment_3": distinct_seg3,
+                "metadata.path_segment_4": distinct_seg4,
+                # "metadata.path_segment_5": distinct_seg5,
+                # "metadata.path_segment_6": distinct_seg6,
+            }
+            return distinct_values_dict
+        except Exception as e:
+            logging.error(f"Error executing async CQL query: {e}")
+            return {}
