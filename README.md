@@ -13,6 +13,7 @@ Alpha-stage library that could almost replace your customer support department.
 - [x] Support for native C* driver and JSON API (Astrapy)
 - [x] LangSmith integrated
 - [x] Cloud native
+- [x] Async
 - [ ] LangServe compatible
 - [ ] Autonomous agent actions
 - [ ] Kubernetes native
