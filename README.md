@@ -25,6 +25,7 @@ Alpha-stage library that could almost replace your customer support department.
 - [ ] Real-time data discovery
 - [ ] Graph-based prompt construction
 - [ ] Automatic data ingestion from S3, GCP Cloud Storage, and Azure Blob Storage
+- [ ] VertexAI support
 
 ## Hyperpersonalization architecture:
 ![Example moonshot pipeline.png](img%2FExample%20moonshot%20pipeline.png)
