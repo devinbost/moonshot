@@ -48,7 +48,9 @@ Reach out to Devin for more info if interested.
 
 ## Setup
 Setup your PyCharm to run Streamlit like this:
+
 [Breaking change: Be sure to set main.py to run core/main.py]
+
 ![img.png](img%2Fimg.png)
 
 The following parameters are currently configurable as environment variables:
