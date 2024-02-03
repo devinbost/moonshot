@@ -133,7 +133,7 @@ class ChainFactory:
                 "PathSegmentValues": path_segment_values_lambda,
                 "UserInformationSummary": user_information_summary_lambda,
             }
-            | PromptFactory.build_collection_vector_find_prompt_v4()
+            | PromptFactory.build_collection_vector_find_prompt_v5()
             | model
             | StrOutputParser()
             | RunnableLambda(PromptFactory.clean_string_v2)
@@ -178,3 +178,42 @@ class ChainFactory:
             | StrOutputParser()
         )
         return final_chain
+
+    async def get_relevant_tables(self, data_access, model, user_info):
+        relevant_table_chain = (
+            {
+                "TableList": RunnableLambda(data_access.get_table_schemas_in_db_v2),
+                "UserInfo": itemgetter("user_info_not_summary"),
+            }
+            | PromptFactory.build_table_identification_prompt()
+            | model
+            | StrOutputParser()
+            | RunnableLambda(PromptFactory.clean_string_v2)
+            | RunnableLambda(data_access.map_tables_and_populate_async)
+        )
+        relevant_tables = await relevant_table_chain.ainvoke(
+            {"user_info_not_summary": user_info}
+        )
+        return relevant_tables
+
+    def build_company_description_chain(self, model: ChatOpenAI) -> Runnable:
+        chain = (
+            {"MissionStatement": itemgetter("mission_statement")}
+            | PromptFactory.build_company_description_data()
+            | model
+            | StrOutputParser()
+        )
+        return chain
+
+    def build_create_table_chain(
+        self, model: ChatOpenAI, business_description_chain: Runnable
+    ) -> Runnable:
+        chain = (
+            {"BusinessDescription": business_description_chain}
+            | PromptFactory.build_example_create_table_statements()
+            | model
+            | StrOutputParser()
+        )
+        return chain
+
+    # def build_insert_statement_chain(self):

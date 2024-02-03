@@ -196,7 +196,12 @@ class Chatbot:
         ]
 
     async def answer_customer(
-        self, user_message: str, user_info: UserInfo, column: Any, col1
+        self,
+        user_message: str,
+        user_info: UserInfo,
+        column: Any,
+        col1,
+        summarization_limit,
     ) -> str:
         """
         Provides an answer to the customer's query.
@@ -221,19 +226,8 @@ class Chatbot:
 
             self.log_response("Start", "Inspecting hundreds of tables in the database")
 
-            relevant_table_chain = (
-                {
-                    "TableList": RunnableLambda(data_access.get_table_schemas_in_db_v2),
-                    "UserInfo": itemgetter("user_info_not_summary"),
-                }
-                | PromptFactory.build_table_identification_prompt()
-                | model
-                | StrOutputParser()
-                | RunnableLambda(PromptFactory.clean_string_v2)
-                | RunnableLambda(data_access.map_tables_and_populate_async)
-            )
-            relevant_tables = await relevant_table_chain.ainvoke(
-                {"user_info_not_summary": user_info}
+            relevant_tables = await factory.get_relevant_tables(
+                data_access, model, user_info
             )
             self.relevant_table_cache = relevant_tables
 
@@ -242,48 +236,23 @@ class Chatbot:
         all_collection_keywords = await data_access.get_path_segment_keywords_async()
         keyword_list_slices = self.build_keyword_slices(all_collection_keywords)
 
-        all_table_insights = []
-        for table in self.relevant_table_cache:
-            self.log_response(
-                "Found Table", f"Found relevant table: {table.table_name}"
+        process_table_futures = [
+            self.process_table_async(
+                all_collection_keywords,
+                all_user_table_summaries,
+                data_access,
+                factory,
+                keyword_list_slices,
+                model,
+                model35,
+                table,
+                user_info,
+                summarization_limit,
             )
+            for table in self.relevant_table_cache
+        ]
 
-            table_summarization = await self.summarize_table_async(
-                factory, model, table, user_info
-            )
-            all_user_table_summaries.append(table_summarization)
-
-            self.log_response(
-                "Inspecting Knowledge Base",
-                "Evaluating thousands of articles across company knowledge base for insights",
-            )
-
-            reduced_keyword_list = await self.reduce_keywords_async(
-                model35, factory, table_summarization, keyword_list_slices
-            )
-            self.log_response("misc", "Keywords reduced")
-            deduped_segment_keywords = self.deduplicate_keywords(reduced_keyword_list)
-            self.log_response("misc", "Keywords deduped")
-            real_deduped_keys = self.get_real_keys(
-                all_collection_keywords, deduped_segment_keywords
-            )
-
-            self.log_response("Relevant Topics List", real_deduped_keys)
-
-            collection_predicates = await self.identify_predicates_async(
-                factory, model, table_summarization, real_deduped_keys
-            )
-            self.log_response("misc", "Predicates identified")
-            topic_summaries_for_table = await self.summarize_topics_async(
-                collection_predicates, table_summarization, model, factory, data_access
-            )
-            self.log_response("misc", "Topic summarized")
-
-            insights_on_table = await self.summarize_findings_async(
-                factory, model, topic_summaries_for_table
-            )
-            self.log_response("misc", "Findings summarized")
-            all_table_insights.append(insights_on_table)
+        all_table_insights = await asyncio.gather(*process_table_futures)
 
         recommendation = await self.generate_recommendation_async(
             factory, model, all_user_table_summaries, all_table_insights, user_message
@@ -294,6 +263,63 @@ class Chatbot:
         )
         bot_chat_area = col1.markdown(recommendation)
         return recommendation
+
+    async def process_table_async(
+        self,
+        all_collection_keywords,
+        all_user_table_summaries,
+        data_access,
+        factory,
+        keyword_list_slices,
+        model,
+        model35,
+        table,
+        user_info,
+        summarization_limit: int,
+    ):
+        self.log_response("Found Table", f"Found relevant table: {table.table_name}")
+        table_summarization = await self.summarize_table_async(
+            factory, model, table, user_info
+        )
+        all_user_table_summaries.append(table_summarization)
+        self.log_response(
+            "Inspecting Knowledge Base",
+            "Evaluating thousands of articles across company knowledge base for insights",
+        )
+        reduced_keyword_list = await self.reduce_keywords_async(
+            model35, factory, table_summarization, keyword_list_slices
+        )
+        deduped_segment_keywords = self.deduplicate_keywords(reduced_keyword_list)
+        real_deduped_keys = self.get_real_keys(
+            all_collection_keywords, deduped_segment_keywords
+        )
+        self.log_response("Relevant Topics List", real_deduped_keys)
+        collection_predicates = await self.identify_predicates_async(
+            factory, model, table_summarization, real_deduped_keys
+        )
+        self.log_response("Collection Predicates", collection_predicates)
+        topic_summaries_for_table = await self.summarize_topics_async(
+            collection_predicates,
+            table_summarization,
+            model,
+            factory,
+            data_access,
+            summarization_limit,
+        )
+        self.log_response("Topic summaries", topic_summaries_for_table)
+        insights_on_table = await self.summarize_findings_async(
+            factory, model, topic_summaries_for_table
+        )
+        return insights_on_table
+
+    def generate_database_records(self, model: ChatOpenAI):
+        chain = (
+            {"MissionStatement": itemgetter("mission_statement")}
+            | PromptFactory.build_company_description_data()
+            | model
+            | StrOutputParser()
+        )
+        return chain
 
     def get_real_keys(self, all_collection_keywords, deduped_segment_keywords):
         real_deduped_keys = {}
@@ -433,11 +459,17 @@ class Chatbot:
         return await predicate_identification_chain.ainvoke({})
 
     async def summarize_topics_async(
-        self, collection_predicates, table_summarization, model, factory, data_access
+        self,
+        collection_predicates,
+        table_summarization,
+        model,
+        factory,
+        data_access,
+        limit: int,
     ):
         tasks = [
             self.process_topic_summary_async(
-                predicate, table_summarization, model, factory, data_access
+                predicate, table_summarization, model, factory, data_access, limit
             )
             for predicate in collection_predicates
         ]
@@ -459,11 +491,11 @@ class Chatbot:
         return topic_summaries_for_table
 
     async def process_topic_summary_async(
-        self, predicate, table_summarization, model, factory, data_access
+        self, predicate, table_summarization, model, factory, data_access, limit: int
     ):
         search_results_for_topic = (
             await data_access.collection_manager.filtered_ANN_search_async(
-                predicate, table_summarization
+                predicate, table_summarization, limit
             )
         )
         summarization_of_topic_chain = factory.build_vector_search_summarization_chain(

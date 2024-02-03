@@ -3,7 +3,7 @@ import logging
 from typing import List, Dict, Any
 import hashlib
 import json
-from astrapy.db import AstraDBCollection
+from astrapy.db import AstraDBCollection, AsyncAstraDBCollection, AsyncAstraDB, AstraDB
 
 from core.EmbeddingManager import EmbeddingManager
 
@@ -14,7 +14,9 @@ class CollectionManager:
     retrieving prompts from an AstraDB collection via vector search.
     """
 
-    def __init__(self, astrapy_db, embedding_manager: EmbeddingManager):
+    def __init__(
+        self, astrapy_db: AstraDB | AsyncAstraDB, embedding_manager: EmbeddingManager
+    ):
         self.astrapy_db = astrapy_db
         self.embedding_manager = embedding_manager
         self.embedding_model = self.embedding_manager.get_sentence_transformer()
@@ -91,7 +93,7 @@ class CollectionManager:
     #         logging.error("Error reading from DB. Exception: " + str(ex))
 
     async def filtered_ANN_search_async(
-        self, collection_filter: Dict[str, str], user_summary: Any
+        self, collection_filter: Dict[str, str], user_summary: Any, limit: int
     ) -> str:
         """
         Perform an Approximate Nearest Neighbor (ANN) search with a filter and user summary asynchronously,
@@ -106,7 +108,7 @@ class CollectionManager:
         input_vector: List[float] = self.embedding_model.encode(
             user_summary_string
         ).tolist()
-        collection = AstraDBCollection(
+        collection = AsyncAstraDBCollection(
             collection_name="sitemapls", astra_db=self.astrapy_db
         )
 
@@ -114,9 +116,15 @@ class CollectionManager:
             results: List[Dict[str, Any]] = await collection.vector_find(
                 vector=input_vector,
                 filter=collection_filter,
-                limit=20,
+                limit=limit,
             )
-            return json.dumps(results)
+            for result in results:
+                print(
+                    "nlp_keywords are: " + result["metadata"]["nlp_keywords"]
+                )  # TODO: Remove ^ after testing
+                print("content is: " + result["content"])
+            result_contents = [result["content"] for result in results]
+            return json.dumps(result_contents)
         except Exception as ex:
             logging.error("Error reading from DB. Exception: " + str(ex))
             return ""

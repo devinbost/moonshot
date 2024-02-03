@@ -2,6 +2,7 @@ import asyncio
 from aiohttp import ClientSession
 from bs4 import BeautifulSoup
 import requests
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores.astradb import AstraDB
 from newspaper import Article
 from langchain.docstore.document import Document
@@ -111,7 +112,9 @@ class Crawler:
             logging.error(f"Timeout or some other error extracting URL {url}: {e}")
             return None
 
-    async def async_chunk_page(self, url: str, session: ClientSession) -> PageContent:
+    async def async_chunk_page(
+        self, url: str, session: ClientSession, splitter: RecursiveCharacterTextSplitter
+    ) -> PageContent:
         """
         Asynchronously chunks a page content from a given URL.
         Parameters:
@@ -122,7 +125,7 @@ class Crawler:
         """
         page_content = await self.extract_page_content(url, session)
         if page_content is not None:
-            chunks = self.data_access.splitter.split_text(page_content.content)
+            chunks = splitter.split_text(page_content.content)
             page_content.chunks = chunks
             return page_content
 
@@ -132,6 +135,7 @@ class Crawler:
         progress_bar: DeltaGenerator,
         session: ClientSession,
         vector_store: AstraDB,
+        splitter: RecursiveCharacterTextSplitter,
     ):
         """
         Asynchronously handles processing of a single URL.
@@ -142,7 +146,7 @@ class Crawler:
             vector_store (AstraDB): The LangChain AstraDB instance where data is to be stored.
         """
         async with self.semaphore:  # this will wait if there are already too many tasks running:
-            page_content = await self.async_chunk_page(url, session)
+            page_content = await self.async_chunk_page(url, session, splitter)
             if page_content is not None:
                 if len(page_content.chunks) == 1 and len(page_content.chunks[0]) < 500:
                     print(
@@ -174,9 +178,7 @@ class Crawler:
                         for chunk in page_content.chunks
                     ]
                     # async transform_documents is not available yet
-                    split_docs = self.data_access.splitter.transform_documents(
-                        page_docs
-                    )
+                    split_docs = splitter.transform_documents(page_docs)
                     # vector_store.aadd_documents(split_docs) isn't yet implemented. We will work around it.
                     # await vector_store.aadd_documents(split_docs)
                     loop = asyncio.get_event_loop()
@@ -214,7 +216,12 @@ class Crawler:
         )
         self.ui_update_in_progress = False
 
-    async def process_urls(self, progress_bar: DeltaGenerator, vector_store: AstraDB):
+    async def process_urls(
+        self,
+        progress_bar: DeltaGenerator,
+        vector_store: AstraDB,
+        splitter: RecursiveCharacterTextSplitter,
+    ):
         """
         Asynchronously processes a list of URLs.
         Parameters:
@@ -229,7 +236,7 @@ class Crawler:
             timeout=timeout
         ) as session:  # If needed, use session for HTTP requests
             tasks = [
-                self.handle_url(url, progress_bar, session, vector_store)
+                self.handle_url(url, progress_bar, session, vector_store, splitter)
                 for url in self.urls
             ]
             await asyncio.gather(*tasks)
@@ -264,7 +271,10 @@ class Crawler:
             print(f"Length of unique URLs is: {length_of_urls}")
 
     def _execute_crawl(
-        self, progress_bar: DeltaGenerator, vector_store: AstraDB
+        self,
+        progress_bar: DeltaGenerator,
+        vector_store: AstraDB,
+        splitter: RecursiveCharacterTextSplitter,
     ) -> None:
         """
         Executes the crawling and ingestion process in an asynchronous loop.
@@ -279,12 +289,18 @@ class Crawler:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            loop.run_until_complete(self.process_urls(progress_bar, vector_store))
+            loop.run_until_complete(
+                self.process_urls(progress_bar, vector_store, splitter)
+            )
         finally:
             loop.close()
 
     def async_crawl_and_ingest(
-        self, sitemap_url: str, progress_bar: DeltaGenerator, vector_store: AstraDB
+        self,
+        sitemap_url: str,
+        progress_bar: DeltaGenerator,
+        vector_store: AstraDB,
+        splitter: RecursiveCharacterTextSplitter,
     ) -> None:
         """
         Asynchronously crawls and ingests data from a given sitemap URL.
@@ -298,13 +314,14 @@ class Crawler:
             None: This method orchestrates the crawling and ingestion process.
         """
         self._initialize_crawl([sitemap_url])
-        self._execute_crawl(progress_bar, vector_store)
+        self._execute_crawl(progress_bar, vector_store, splitter)
 
     def async_crawl_and_ingest_list(
         self,
         sitemap_url_list: List[str],
         progress_bar: DeltaGenerator,
         vector_store: AstraDB,
+        splitter: RecursiveCharacterTextSplitter,
     ) -> None:
         """
         Asynchronously crawls and ingests data from a list of sitemap URLs.
@@ -313,9 +330,9 @@ class Crawler:
             sitemap_url_list: A list of sitemap URLs to crawl.
             progress_bar: Streamlit UI element for progress indication.
             vector_store: An instance of AstraDB to store the crawled data.
-
+            splitter: Returns instance of RecursiveCharacterTextSplitter for chunking the data
         Returns:
             None: This method orchestrates the crawling and ingestion process for multiple URLs.
         """
         self._initialize_crawl(sitemap_url_list, is_list=True)
-        self._execute_crawl(progress_bar, vector_store)
+        self._execute_crawl(progress_bar, vector_store, splitter)

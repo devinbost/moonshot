@@ -4,6 +4,7 @@ from cassandra.cluster import (
 from cassandra.auth import PlainTextAuthProvider
 
 from astrapy.db import AstraDB as AstraPyDB
+from astrapy.db import AsyncAstraDB as AsyncAstraPyDB
 from langchain.vectorstores import Cassandra
 from langchain.vectorstores import AstraDB
 
@@ -21,20 +22,20 @@ class VectorStoreFactory:
     def create_vector_store(self, store_type, **kwargs):
         if store_type == "Cassandra":  # Native API interface for LangChain
             return Cassandra(
-                embedding=self.embedding_manager.get_sentence_transformer(),
+                embedding=self.embedding_manager.get_embedding(),
                 session=kwargs.get("session"),
                 keyspace=self.config_loader.get("keyspace"),
                 table_name=self.config_loader.get("table_name"),
             )
         elif store_type == "AstraDB":  # Data API interface for LangChain
             return AstraDB(
-                embedding=self.embedding_manager.get_sentence_transformer(),
+                embedding=self.embedding_manager.get_embedding(),
                 collection_name=kwargs.get("collection_name"),
                 token=self.config_loader.get("token"),
                 api_endpoint=self.config_loader.get("api_endpoint"),
             )
         elif store_type == "AstraPyDB":  # Data API interface for direct access
-            return AstraPyDB(
+            return AsyncAstraPyDB(
                 token=self.config_loader.get("token"),
                 api_endpoint=self.config_loader.get("api_endpoint"),
             )

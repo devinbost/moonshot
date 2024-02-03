@@ -233,6 +233,48 @@ USER INFORMATION SUMMARY:
     return PromptTemplate.from_template(prompt)
 
 
+def build_collection_vector_find_prompt_v5() -> PromptTemplate:
+    prompt = (
+        get_helpful_assistant_prefix()
+        + """ 
+I will give you lists of path segment values and information about a customer. I want you to use the information to create a list of JSON objects. These JSON objects will be used in a later step to construct queries that will be used to find articles with information that should help the customer. 
+It is critical that the path segment values match the customer's intent so that we can retrieve articles that will resonate with the customer. 
+If the path segment values don't relate to the customer's information, then it will be very bad because you will cause the customer to receive information that won't relate to them and could upset or offend them.
+You must follow these rules that apply to each JSON object in the list:
+- The value of the JSON object MUST exist in the corresponding list that I will provide below. 
+EXAMPLE: if the value "how-to-use-a-verizon-jetpack" exists in the list for path segment values of "metadata.path_segment_3", you may use "how-to-use-a-verizon-jetpack" as the value for the JSON object if and only if:
+    -- The path segment key is "metadata.path_segment_3"
+    -- The path segment key (in this case "how-to-use-a-verizon-jetpack") is strongly associated with at least some of the content of the USER INFORMATION SUMMARY below.
+    -- There is not another path segment value from the "metadata.path_segment_3" list that is a better match to some of the USER INFORMATION SUMMARY.
+    -- The value (in this case "how-to-use-a-verizon-jetpack") does not exist more than once in the JSON list you provide.
+ADDITIONAL GUIDELINES:
+- You should always select the most specific matches available. For example, if the USER INFORMATION SUMMARY mentions an "iPhone 13", if the path segment value "iPhone 13" is available (in one of the path segment value lists), you should prefer the more specific ("iPhone 13" in this case) over "iPhone" or "phone". 
+- You should NEVER create a JSON object using a value that doesn't exist in the available path segment values. 
+- You should NEVER create a JSON object using a value that is strongly unrelated to any content in the USER INFORMATION SUMMARY.
+- Pay very careful attention to which path segment values (path segment values) are part of which list to ensure you don't try to use a path segment value as a value for a key to which it does not belong.
+- Use at least one path segment for each JSON object, but avoid using more than one.
+- Ensure the path segment value corresponds to the correct path segment number based on the provided lists.
+- Create 1-3 JSON objects, covering different subjects related to the user information.
+- Ensure the path segment value is strongly associated with at least some of the content of the USER INFORMATION SUMMARY below.
+- Don't use the same path segment value more than once. Prefer the most specific match if there are multiple matches.
+
+The USER INFORMATION SUMMARY is at the end. Remember to only find path segment values that strongly relate to information in the USER INFORMATION SUMMARY.
+For example, if the user is asking for support, select support-related path segment values, not security-related path segment values. If the user is interested in upgrading, don't bring up path segment values about firewalls. Bring up promotional path segment values instead.
+"""
+        + """
+
+PATH SEGMENT VALUES:
+
+{PathSegmentValues}
+
+USER INFORMATION SUMMARY:
+
+{UserInformationSummary}
+        """
+    )
+    return PromptTemplate.from_template(prompt)
+
+
 def build_select_query_for_top_three_rows() -> PromptTemplate:
     """
     Builds a prompt template for generating a SELECT query to retrieve the top three rows from a given table schema.
@@ -441,3 +483,66 @@ def clean_string_v2(s: str) -> str:
 
     # Joining the lines back into a single string
     return "\n".join(lines)
+
+
+### Below prompt templates are useful for
+def build_company_description_data() -> PromptTemplate:
+    prompt = (
+        "You're a helpful assistant and an experienced data expert and business consultant. "
+        "From the given company mission statement, I want you to generate a description of what kind of data "
+        "they likely will need to have in their business. I want you to generate a hypothetical customer profile "
+        "and describe what you would know (or would want to know) about such a customer. "
+        "I'm particularly interested in the data that you would store based on your interactions with this customer. "
+        "Also, if you can identify some example challenges the customer might experience, please generate a "
+        "hypothetical description of an example challenge they might experience. "
+        "Return only the requested descriptions without any other narration or explanation."
+        ""
+        "MISSION STATEMENT:"
+        ""
+        "{MissionStatement}"
+    )
+    return PromptTemplate.from_template(prompt)
+
+
+def build_example_create_table_statements() -> PromptTemplate:
+    prompt = (
+        "You're a helpful assistant. Don't give me any summary information, explanation, or introduction. "
+        "In fact, don't say anything other than what I specify. You're also a great NoSQL database architect. "
+        "From the given business description, I want you to generate a list of valid CREATE TABLE statements "
+        "for Cassandra to represent customer data. For simplicity, use only TEXT and numeric types, and "
+        "don't use UUID or TIMESTAMP. All of the tables should include a user_id column in the primary key. "
+        "Return the results as a JSON array of strings."
+        ""
+        ""
+        "BUSINESS DESCRIPTION:"
+        ""
+        "{BusinessDescription}"
+    )
+
+    return PromptTemplate.from_template(prompt)
+
+
+def build_example_insert_statements() -> PromptTemplate:
+    prompt = (
+        "You're a helpful assistant. Don't give me any summary information, explanation, or introduction. "
+        "In fact, don't say anything other than what I specify. Based on the given business description and "
+        "create table statements, generate INSERT statements that generate data for the tables. The data should be "
+        "realistic and consistent with the given business description. Return the results as a JSON array of INSERT statements. "
+        "Furthermore, ensure that the user_id values match across insert statements so that we can create a complete set of data "
+        "for a single user. Create enough rows to paint a complete picture of the given user. Be highly descriptive and verbose "
+        "in the data you generate to ensure that the data is as realistic as possible."
+        ""
+        ""
+        "CREATE TABLE STATEMENTS:"
+        ""
+        "{CreateTableStatements}"
+        ""
+        ""
+        ""
+        "BUSINESS DESCRIPTION:"
+        ""
+        "{BusinessDescription}"
+        ""
+    )
+
+    return PromptTemplate.from_template(prompt)

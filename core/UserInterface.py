@@ -17,6 +17,7 @@ from ClassInspector import (
 from core.CollectionManager import CollectionManager
 from core.ConfigLoader import ConfigLoader
 from core.EmbeddingManager import EmbeddingManager
+from core.SplitterFactory import SplitterFactory
 from core.VectorStoreFactory import VectorStoreFactory
 from pydantic_models.ComponentData import ComponentData
 from DataAccess import DataAccess
@@ -261,11 +262,16 @@ def setup_sitemap_crawler_ui(column, crawler: Crawler):
         sitemap_list = get_sitemap_list_from_csv(sitemaps)
         embedding_manager = EmbeddingManager()
         config_loader = ConfigLoader()
+        # I could update the ConfigLoader to first load from a YAML config file.
         vector_store_factory = VectorStoreFactory(embedding_manager, config_loader)
         vector_store = vector_store_factory.create_vector_store(
             "AstraDB", collection_name=table_name
         )
-        crawler.async_crawl_and_ingest_list(sitemap_list, progress_bar, vector_store)
+        splitter_factory = SplitterFactory(chunk_size=300, chunk_overlap=150)
+        splitter = splitter_factory.create_splitter()
+        crawler.async_crawl_and_ingest_list(
+            sitemap_list, progress_bar, vector_store, splitter
+        )
         end = time.time()
         completion_time = end - start  # Time elapsed in seconds
         column.caption(f"Completed parsing docs in {completion_time} seconds")
@@ -317,12 +323,16 @@ def render_new(data_access: DataAccess, chatbot: Chatbot, crawler: Crawler):
     user_chat_area = col1.text_area("Enter message here")
     searched = col1.button("Search")
 
+    summarization_limit = 3  # We can make this a config param
+
     if len(user_chat_area) > 0 and searched:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
             loop.run_until_complete(
-                chatbot.answer_customer(user_chat_area, user_info, col2, col1)
+                chatbot.answer_customer(
+                    user_chat_area, user_info, col2, col1, summarization_limit
+                )
             )
         finally:
             loop.close()

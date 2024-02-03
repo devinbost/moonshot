@@ -87,8 +87,8 @@ class DataAccess:
             "sentence-transformers/" + self.embedding_model
         )
         self.splitter = RecursiveCharacterTextSplitter(
-            chunk_size=3000,
-            chunk_overlap=1500,
+            chunk_size=300,
+            chunk_overlap=150,
             length_function=len,
             is_separator_regex=False,
         )

@@ -11,3 +11,6 @@ class EmbeddingManager:
 
     def get_sentence_transformer(self):
         return self.embedding_direct
+
+    def get_embedding(self):
+        return self.embedding
