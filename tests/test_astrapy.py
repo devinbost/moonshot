@@ -1,34 +1,8 @@
-import json
-from operator import itemgetter
-from typing import List
-
 from astrapy.db import AstraDBCollection
-from langchain.chat_models import ChatOpenAI
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.prompts import ChatPromptTemplate
-from langchain.vectorstores import FAISS
-from langchain_core.output_parsers import StrOutputParser, ListOutputParser
-from langchain_core.runnables import (
-    RunnablePassthrough,
-    RunnableLambda,
-    RunnableParallel,
-)
 
 import unittest
-from unittest.mock import MagicMock, patch
 
 from sentence_transformers import SentenceTransformer
-
-import ChainFactory
-import PromptFactory
-from DataAccess import DataAccess
-import uuid
-
-from pydantic_models.ColumnSchema import ColumnSchema
-from pydantic_models.PropertyInfo import PropertyInfo
-from pydantic_models.TableExecutionInfo import TableExecutionInfo
-from pydantic_models.TableSchema import TableSchema
-from pydantic_models.UserInfo import UserInfo
 
 
 class TestAstrapy(unittest.TestCase):
@@ -37,7 +11,7 @@ class TestAstrapy(unittest.TestCase):
         code = """
 import os
 from astrapy.db import AstraDB as AstraPyDB
-db = AstraPyDB(token=os.getenv("ASTRA_DB_TOKEN_BASED_PASSWORD"), api_endpoint=os.getenv("ASTRA_DB_API_ENDPOINT"))
+db = AstraPyDB(token=os.getenv("ASTRA_TOKEN"), api_endpoint=os.getenv("ASTRA_ENDPOINT"))
 """
         exec(code, context)
         db = context["db"]
@@ -48,8 +22,8 @@ db = AstraPyDB(token=os.getenv("ASTRA_DB_TOKEN_BASED_PASSWORD"), api_endpoint=os
         from astrapy.db import AstraDB as AstraPyDB
 
         db = AstraPyDB(
-            token=os.getenv("ASTRA_DB_TOKEN_BASED_PASSWORD"),
-            api_endpoint=os.getenv("ASTRA_DB_API_ENDPOINT"),
+            token=os.getenv("ASTRA_TOKEN"),
+            api_endpoint=os.getenv("ASTRA_ENDPOINT"),
         )
         embedding_model = "all-MiniLM-L12-v2"
         embedding_direct = SentenceTransformer(

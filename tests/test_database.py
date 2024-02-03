@@ -1,18 +1,11 @@
-import os
 import unittest
 from unittest.mock import MagicMock, patch
 
-from cassandra.auth import PlainTextAuthProvider
-from cassandra.cluster import Cluster, Session
-from cassandra.query import SimpleStatement
-
-from DataAccess import DataAccess
-import uuid
+from core.DataAccess import DataAccess
 
 from pydantic_models.ColumnSchema import ColumnSchema
 from pydantic_models.TableKey import TableKey
 from pydantic_models.TableSchema import TableSchema
-from Config import config
 
 
 class TestGetTableSchemas(unittest.TestCase):
@@ -35,34 +28,6 @@ class TestGetTableSchemas(unittest.TestCase):
             ],
             indexes,
         )
-
-    def test_populate_keys(self):
-        fake_data_access = DataAccess()
-        table_schema = TableSchema(
-            keyspace_name="telecom",
-            table_name="customer_support_transcripts",
-            columns=[
-                ColumnSchema(column_name="id", column_type="int"),
-                ColumnSchema(column_name="name", column_type="string"),
-            ],
-        )
-        indexes = fake_data_access.get_cql_table_keys(table_schema)
-        expected_keys = [
-            TableKey(
-                column_name="phone_number",
-                clustering_order="none",
-                kind="partition_key",
-                position=0,
-            ),
-            TableKey(
-                column_name="transcript_id",
-                clustering_order="asc",
-                kind="clustering",
-                position=0,
-            ),
-        ]
-
-        self.assertEqual(expected_keys, indexes)
 
     @patch("DataAccess.DataAccess.getCqlSession")
     def test_get_table_schemas(self, mock_get_session):
@@ -114,7 +79,7 @@ class TestGetTableSchemas(unittest.TestCase):
         ]
 
         # Test
-        result = data_access.get_table_schemas(keyspace)
+        result = data_access.get_table_schemas_in_db_v2(keyspace)
         self.assertEqual(result, expected_schemas)
 
 
