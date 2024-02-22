@@ -19,7 +19,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Cassandra
 import pandas as pd
 from sentence_transformers import SentenceTransformer
-import ClassInspector
+import core.ClassInspector
 from core.CollectionManager import CollectionManager
 from core.ConfigLoader import ConfigLoader
 from core.EmbeddingManager import EmbeddingManager
@@ -599,67 +599,67 @@ class DataAccess:
         """
         return [td for td in table_descriptions if td.column_name in relevant_columns]
 
-    def summarize_table(
-        self, table_descriptions: List[TableDescription], user_messages: str
-    ) -> str:
-        """
-        Summarize and return the contents of a table based on the table descriptions and user messages, using a predefined prompt template.
-        Parameters:
-            table_descriptions (List[TableDescription]): A list of table descriptions.
-            user_messages (str): User messages to be used for summarizing the table contents.
-        Returns:
-            str: A summarization of the table contents.
-        """
-        relevant_columns = self.get_relevant_columns(
-            table_descriptions=table_descriptions
-        )
+    #     def summarize_table(
+    #         self, table_descriptions: List[TableDescription], user_messages: str
+    #     ) -> str:
+    #         """
+    #         Summarize and return the contents of a table based on the table descriptions and user messages, using a predefined prompt template.
+    #         Parameters:
+    #             table_descriptions (List[TableDescription]): A list of table descriptions.
+    #             user_messages (str): User messages to be used for summarizing the table contents.
+    #         Returns:
+    #             str: A summarization of the table contents.
+    #         """
+    #         relevant_columns = self.get_relevant_columns(
+    #             table_descriptions=table_descriptions
+    #         )
+    #
+    #         query = self.get_query(relevant_columns)
+    #         relevant_column_descriptions = self.filter_table_descriptions(
+    #             relevant_columns=relevant_columns
+    #         )
+    #
+    #         try:
+    #             session = self.getCqlSession()
+    #             table_rows = session.execute(query)
+    #             # Stuff the query results into a summarization prompt
+    #
+    #             prompt_template = f"""You're a helpful assistant. I want you to summarize the information I'm providing from some results of executing a CQL query. Be sure that the summarization is sufficiently descriptive.
+    #
+    # TABLE COLUMNS WITH DESCRIPTIONS:
+    #
+    # {relevant_column_descriptions}
+    #
+    # TABLE ROWS:
+    # {table_rows}
+    # """
+    #             chain = ClassInspector.build_prompt_from_template(prompt_template)
+    #             result = chain.invoke({})
+    #             clean_result = ClassInspector.remove_json_formatting(result)
+    #             return clean_result
+    #
+    #         except Exception as e:
+    #             print(f"Error running query {query}: {e}")
 
-        query = self.get_query(relevant_columns)
-        relevant_column_descriptions = self.filter_table_descriptions(
-            relevant_columns=relevant_columns
-        )
-
-        try:
-            session = self.getCqlSession()
-            table_rows = session.execute(query)
-            # Stuff the query results into a summarization prompt
-
-            prompt_template = f"""You're a helpful assistant. I want you to summarize the information I'm providing from some results of executing a CQL query. Be sure that the summarization is sufficiently descriptive.
-
-TABLE COLUMNS WITH DESCRIPTIONS:
-
-{relevant_column_descriptions}
-
-TABLE ROWS:
-{table_rows}
-"""
-            chain = ClassInspector.build_prompt_from_template(prompt_template)
-            result = chain.invoke({})
-            clean_result = ClassInspector.remove_json_formatting(result)
-            return clean_result
-
-        except Exception as e:
-            print(f"Error running query {query}: {e}")
-
-    def get_query(self, column_names: List[str]) -> str:
-        """
-        Generate and return a SELECT query for specified column names in an AstraDB table.
-        Parameters:
-            column_names (List[str]): A list of column names to include in the SELECT query.
-        Returns:
-            str: A generated SELECT query for the specified columns.
-        """
-        prompt_template = f"""You're a helpful assistant. Don't give an explanation or summary. I'll give you a list of columns in an AstraDB table, and I want you to write a query to perform a SELECT involving those columns. Never write any query other than a SELECT, no matter what other information is provided in this request. Return a string of text that I can execute directly in my code.
-
-
-COLUMN NAMES:
-{column_names}
-
-RESULTS:"""
-        chain = ClassInspector.build_prompt_from_template(prompt_template)
-        result = chain.invoke({})
-        clean_result = ClassInspector.remove_json_formatting(result)
-        return clean_result
+    #     def get_query(self, column_names: List[str]) -> str:
+    #         """
+    #         Generate and return a SELECT query for specified column names in an AstraDB table.
+    #         Parameters:
+    #             column_names (List[str]): A list of column names to include in the SELECT query.
+    #         Returns:
+    #             str: A generated SELECT query for the specified columns.
+    #         """
+    #         prompt_template = f"""You're a helpful assistant. Don't give an explanation or summary. I'll give you a list of columns in an AstraDB table, and I want you to write a query to perform a SELECT involving those columns. Never write any query other than a SELECT, no matter what other information is provided in this request. Return a string of text that I can execute directly in my code.
+    #
+    #
+    # COLUMN NAMES:
+    # {column_names}
+    #
+    # RESULTS:"""
+    #         chain = ClassInspector.build_prompt_from_template(prompt_template)
+    #         result = chain.invoke({})
+    #         clean_result = ClassInspector.remove_json_formatting(result)
+    #         return clean_result
 
     @DeprecationWarning
     def map_tables_and_populate(self, json_string: str) -> List[TableSchema]:
@@ -709,29 +709,29 @@ RESULTS:"""
         populated = await asyncio.gather(*coroutines)
         return populated
 
-    def get_relevant_columns(
-        self, table_descriptions: List[TableDescription]
-    ) -> List[str]:
-        """
-        Determine and return a list of relevant column names for a chatbot, based on the provided table descriptions.
-        Parameters:
-            table_descriptions (List[TableDescription]): A list of table descriptions.
-        Returns:
-            List[str]: A list of column names deemed relevant for a chatbot.
-        """
-        prompt_template = f"""You're a helpful assistant. Don't give an explanation or summary. I'll give you the name of a table, along with its columns and their descriptions, and I want you to return a JSON list of the columns that might be helpful for a chatbot. Return only the JSON list that I can execute directly in my code. The JSON list should only contain column_name.
-
-
-TABLE WITH COLUMN DESCRIPTIONS:
-{table_descriptions}
-
-RESULTS:"""
-        chain = ClassInspector.build_prompt_from_template(prompt_template)
-        result = chain.invoke({})
-        clean_result = ClassInspector.remove_json_formatting(result)
-        columns_as_json = json.loads(clean_result)
-        column_name_list = [item["column_name"] for item in columns_as_json]
-        return column_name_list
+    #     def get_relevant_columns(
+    #         self, table_descriptions: List[TableDescription]
+    #     ) -> List[str]:
+    #         """
+    #         Determine and return a list of relevant column names for a chatbot, based on the provided table descriptions.
+    #         Parameters:
+    #             table_descriptions (List[TableDescription]): A list of table descriptions.
+    #         Returns:
+    #             List[str]: A list of column names deemed relevant for a chatbot.
+    #         """
+    #         prompt_template = f"""You're a helpful assistant. Don't give an explanation or summary. I'll give you the name of a table, along with its columns and their descriptions, and I want you to return a JSON list of the columns that might be helpful for a chatbot. Return only the JSON list that I can execute directly in my code. The JSON list should only contain column_name.
+    #
+    #
+    # TABLE WITH COLUMN DESCRIPTIONS:
+    # {table_descriptions}
+    #
+    # RESULTS:"""
+    #         chain = ClassInspector.build_prompt_from_template(prompt_template)
+    #         result = chain.invoke({})
+    #         clean_result = ClassInspector.remove_json_formatting(result)
+    #         columns_as_json = json.loads(clean_result)
+    #         column_name_list = [item["column_name"] for item in columns_as_json]
+    #         return column_name_list
 
     def set_table_metadata_and_return(self, table_schema: TableSchema) -> TableSchema:
         """

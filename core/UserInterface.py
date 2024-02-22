@@ -267,8 +267,31 @@ def setup_sitemap_crawler_ui(column, crawler: Crawler):
         vector_store = vector_store_factory.create_vector_store(
             "AstraDB", collection_name=table_name
         )
-        splitter_factory = SplitterFactory(chunk_size=300, chunk_overlap=150)
+        splitter_factory = SplitterFactory(chunk_size=3000, chunk_overlap=1500)
         splitter = splitter_factory.create_splitter()
+        from ragatouille import RAGPretrainedModel
+
+        # colbert_index = RAGPretrainedModel.from_pretrained("colbert-ir/colbertv2.0")
+        # colbert_index.index(
+        #     collection=["init"],
+        #     # document_ids = ["miyazaki"],
+        #     document_metadatas=[
+        #         {
+        #             "url": "init",
+        #             "title": "init",
+        #             "nlp_keywords": "init",
+        #             "nlp_summary": "init",
+        #             "subdomain": "init",
+        #             **{
+        #                 f"path_segment_{i}": segment
+        #                 for i, segment in enumerate(["1", "2", "3", "4", "5"], start=1)
+        #             },
+        #         }
+        #     ],
+        #     index_name="colbert_index",
+        #     max_document_length=3001,
+        #     split_documents=False,
+        # )
         crawler.async_crawl_and_ingest_list(
             sitemap_list, progress_bar, vector_store, splitter
         )

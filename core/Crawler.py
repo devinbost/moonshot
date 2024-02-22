@@ -7,12 +7,14 @@ from langchain_community.vectorstores.astradb import AstraDB
 from newspaper import Article
 from langchain.docstore.document import Document
 import aiohttp
+from ragatouille.RAGPretrainedModel import RAGPretrainedModel
 from streamlit.delta_generator import DeltaGenerator
-from DataAccess import DataAccess
+from core.DataAccess import DataAccess
 import logging
 from datetime import datetime
+import time
 
-from typing import List
+from typing import List, Sequence
 
 from pydantic_models.PageContent import PageContent
 
@@ -33,6 +35,7 @@ class Crawler:
             20
         )  # limit to 10 concurrent tasks, adjust as needed
         self.sitemap_gen_semaphore = asyncio.Semaphore(20)
+        self.colbert_index = None
 
     def get_url_count(self) -> int:
         """
@@ -160,31 +163,39 @@ class Crawler:
                         path_segments,
                         subdomain,
                     ) = page_content.extract_url_hierarchy_and_subdomain()
-                    page_docs = [
-                        Document(
-                            page_content=chunk,
-                            metadata={
-                                "url": url,
-                                "title": page_content.title,
-                                "nlp_keywords": page_content.keywords_as_csv(),
-                                "nlp_summary": page_content.summary,
-                                "subdomain": subdomain if subdomain is not None else "",
-                                **{
-                                    f"path_segment_{i}": segment
-                                    for i, segment in enumerate(path_segments, start=1)
-                                },
+
+                    texts = [chunk for chunk in page_content.chunks]
+                    metadatas = [
+                        {
+                            "url": url,
+                            "title": page_content.title,
+                            "nlp_keywords": page_content.keywords_as_csv(),
+                            "nlp_summary": page_content.summary,
+                            "subdomain": subdomain if subdomain is not None else "",
+                            **{
+                                f"path_segment_{i}": segment
+                                for i, segment in enumerate(path_segments, start=1)
                             },
-                        )
+                        }
                         for chunk in page_content.chunks
                     ]
-                    # async transform_documents is not available yet
-                    split_docs = splitter.transform_documents(page_docs)
-                    # vector_store.aadd_documents(split_docs) isn't yet implemented. We will work around it.
-                    # await vector_store.aadd_documents(split_docs)
-                    loop = asyncio.get_event_loop()
-                    await loop.run_in_executor(
-                        None, vector_store.add_documents, split_docs
-                    )
+                    if self.colbert_index is None:
+                        self.colbert_index = RAGPretrainedModel.from_pretrained(
+                            "colbert-ir/colbertv2.0"
+                        )
+                        self.colbert_index.index(
+                            collection=texts,
+                            document_metadatas=metadatas,
+                            index_name="colbert_index",
+                            max_document_length=3001,
+                            split_documents=False,
+                        )
+                    else:
+                        self.colbert_index.add_to_index(
+                            new_collection=texts,
+                            new_document_metadatas=metadatas,
+                            index_name="colbert_index",
+                        )
                     logging.info(
                         f"Written to database, URL: {url}, Title: {page_content.title}"
                     )
@@ -195,6 +206,38 @@ class Crawler:
             if not self.ui_update_in_progress:
                 self.ui_update_in_progress = True
             await self.update_ui(self.counter, progress_bar)
+
+    async def safe_insert_documents(
+        self,
+        vector_store,
+        split_docs: Sequence | List,
+        max_retries=3,
+        initial_timeout=5,
+    ):
+        retries = 0
+        timeout = initial_timeout
+
+        while retries < max_retries:
+            try:
+                # Your document insertion logic here
+                # Example: response = httpx.post(url, json=documents, timeout=timeout)
+                # Check response status if necessary
+                return await vector_store.aadd_documents(
+                    split_docs
+                )  # or handle success as needed
+
+            except Exception as e:
+                logging.warning(
+                    f"Error occurred when inserting doc to vector store: {e}. Retrying {retries + 1}/{max_retries}..."
+                )
+                time.sleep(2**retries)  # Exponential backoff
+                retries += 1
+                timeout += 5  # Optionally increase timeout on each retry
+
+        # After max retries, handle the failure case
+        logging.error("Maximum retries reached. Operation failed.")
+        # Handle failure, e.g., by raising an exception or returning a failure status
+        raise Exception("Failed to insert documents after retries.")
 
     async def update_ui(self, counter: int, progress_bar: DeltaGenerator):
         """

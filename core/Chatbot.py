@@ -9,9 +9,9 @@ from typing import List, Dict, Any, Tuple
 from langchain.chains import ConversationalRetrievalChain
 from langchain_core.prompts import ChatPromptTemplate
 
-import PromptFactory
-from ChainFactory import ChainFactory
-from DataAccess import DataAccess
+from core.PromptFactory import PromptFactory
+from core.ChainFactory import ChainFactory
+from core.DataAccess import DataAccess
 import os
 from ibm_watson_machine_learning.foundation_models import Model
 from ibm_watson_machine_learning.foundation_models.extensions.langchain import (
@@ -264,6 +264,68 @@ class Chatbot:
         bot_chat_area = col1.markdown(recommendation)
         return recommendation
 
+    # async def answer_customer_colbert(
+    #     self,
+    #     user_message: str,
+    #     user_info: UserInfo,
+    #     column: Any,
+    #     col1,
+    #     summarization_limit,
+    # ) -> str:
+    #     """
+    #     Provides an answer to the customer's query.
+    #     Parameters:
+    #         user_message (str): The customer's message.
+    #         user_info (UserInfo): The user information.
+    #         column (Any): The UI column to display the response.
+    #     Returns:
+    #         str: The bot's response to the customer.
+    #     """
+    #
+    #     self.column = column
+    #
+    #     if self.relevant_table_cache is None:
+    #         # Moved the instantiation of models and factories outside of the if-block to avoid unnecessary recreations
+    #         model = ChatOpenAI(model_name="gpt-4-1106-preview")
+    #         model35 = ChatOpenAI(model_name="gpt-3.5-turbo-1106")
+    #         factory = ChainFactory()
+    #         data_access = (
+    #             self.data_access
+    #         )  # Assuming self.data_access is already instantiated in __init__
+    #
+    #         self.log_response("Start", "Inspecting hundreds of tables in the database")
+    #
+    #         relevant_tables = await factory.get_relevant_tables(
+    #             data_access, model, user_info
+    #         )
+    #         self.relevant_table_cache = relevant_tables
+    #
+    #     process_question_answer_futures = [
+    #         self.process_table_async_colbert(
+    #             data_access,
+    #             factory,
+    #             model,
+    #             model35,
+    #             table,
+    #             user_info,
+    #             summarization_limit,
+    #             user_message,
+    #         )
+    #         for table in self.relevant_table_cache
+    #     ]
+    #
+    #     all_qa_insights = await asyncio.gather(*process_question_answer_futures)
+    #
+    #     recommendation = await self.generate_recommendation_async(
+    #         factory, model, all_user_table_summaries, all_qa_insights, user_message
+    #     )
+    #     self.our_responses.append(recommendation)
+    #     self.log_response(
+    #         "Recommendation", f"Recommendation to the user is: {recommendation}"
+    #     )
+    #     bot_chat_area = col1.markdown(recommendation)
+    #     return recommendation
+
     async def process_table_async(
         self,
         all_collection_keywords,
@@ -311,6 +373,39 @@ class Chatbot:
             factory, model, topic_summaries_for_table
         )
         return insights_on_table
+
+    # async def process_table_async_colbert(
+    #     self,
+    #     data_access,
+    #     factory,
+    #     keyword_list_slices,
+    #     model,
+    #     model35,
+    #     table,
+    #     user_info,
+    #     summarization_limit: int,
+    # ):
+    #     self.log_response("Found Table", f"Found relevant table: {table.table_name}")
+    #     customer_questions = await self.summarize_table_and_generation_questions_async(
+    #         factory, model, model35, table, user_info
+    #     )
+    #     self.log_response(
+    #         "Inspecting Knowledge Base",
+    #         "Evaluating thousands of articles across company knowledge base for insights",
+    #     )
+    #
+    #     doc_summary_answers = await self.answer_questions_async(
+    #         customer_questions,
+    #         model,
+    #         factory,
+    #         data_access,
+    #         summarization_limit,
+    #     )
+    #     self.log_response("Documentation summaries", doc_summary_answers)
+    #     insights_on_table = await self.summarize_findings_async(
+    #         factory, model, topic_summaries_for_table
+    #     )
+    #     return insights_on_table
 
     def generate_database_records(self, model: ChatOpenAI):
         chain = (
@@ -377,6 +472,30 @@ class Chatbot:
             f"Summary of what we know about customer from this table:\n\n {table_summarization}",
         )
         return table_summarization
+
+    async def summarize_table_and_generation_questions_async(
+        self,
+        factory: ChainFactory,
+        model,
+        model35,
+        table,
+        user_info: UserInfo,
+        customer_question: str,
+    ) -> List[str]:
+        table_summarization_chain = factory.build_summarization_chain(
+            model, self.data_access, table
+        )
+        question_chain = factory.build_question_generation_chain(
+            model35, table_summarization_chain
+        )
+        questions: List[str] = await question_chain.ainvoke(
+            {"user_info_not_summary": user_info, "customer_question": customer_question}
+        )  # array of
+        self.log_response(
+            "Question list",
+            f"List of questions the customer might ask:\n\n {questions}",
+        )
+        return questions
 
     async def reduce_keywords_async(
         self, model35, factory, table_summarization, keyword_list_slices
@@ -475,6 +594,22 @@ class Chatbot:
         ]
         return await asyncio.gather(*tasks)
 
+    # async def answer_questions_async(
+    #     self,
+    #     questions: List[str],
+    #     model,
+    #     factory,
+    #     data_access,
+    #     limit: int,
+    # ):
+    #     tasks = [
+    #         self.process_question_async(
+    #             question, model, factory, data_access, limit
+    #         )
+    #         for question in questions
+    #     ]
+    #     return await asyncio.gather(*tasks)
+
     @DeprecationWarning
     def summarize_topics(
         self, collection_predicates, table_summarization, model, factory, data_access
@@ -489,6 +624,19 @@ class Chatbot:
                 )
             )
         return topic_summaries_for_table
+
+    # async def process_question_async(
+    #     self, question: str, model, factory, data_access, limit: int
+    # ):
+    #     search_results_for_question = (
+    #         await data_access.colbert_manager?.search(
+    #             question
+    #         )
+    #     )
+    #     summarization_of_topic_chain = factory.build_vector_search_summarization_chain(
+    #         model, search_results_for_question
+    #     )
+    #     return await summarization_of_topic_chain.ainvoke({})
 
     async def process_topic_summary_async(
         self, predicate, table_summarization, model, factory, data_access, limit: int

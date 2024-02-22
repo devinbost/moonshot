@@ -19,7 +19,9 @@ class VectorStoreFactory:
         self.embedding_manager = embedding_manager
         self.config_loader = config_loader
 
-    def create_vector_store(self, store_type, **kwargs):
+    def create_vector_store(
+        self, store_type, **kwargs
+    ) -> Cassandra | AstraDB | AsyncAstraPyDB | Cluster:
         if store_type == "Cassandra":  # Native API interface for LangChain
             return Cassandra(
                 embedding=self.embedding_manager.get_embedding(),

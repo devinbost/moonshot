@@ -1,4 +1,5 @@
 import json
+import logging
 from operator import itemgetter
 from typing import List, Dict, Any
 
@@ -6,8 +7,8 @@ from langchain_community.chat_models import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableLambda, RunnableParallel, Runnable
 
-import PromptFactory
-from DataAccess import DataAccess
+from core.PromptFactory import PromptFactory
+from core.DataAccess import DataAccess
 from pydantic_models.TableSchema import TableSchema
 
 
@@ -29,10 +30,19 @@ class ChainFactory:
         """
 
         def test_func(testme: Dict[str, Any]) -> Any:
+            """Sets user_info_not_summary from invocation to PropertyInfo.
+            Initially was a workaround, but may not be needed anymore.
+            Need to try replacing with itemgetter('user_info_not_summary')"""
             print(testme)
             print(table_schema)
             user_props = testme["user_info_not_summary"]
             return user_props
+
+        def print_output_and_return(x):
+            logging.info(
+                "Here is the user summary we obtained from the table: " + str(x)
+            )
+            return x
 
         select_with_where_chain: Runnable = (
             {
@@ -50,6 +60,7 @@ class ChainFactory:
             | PromptFactory.build_summarization_prompt()
             | self.model35
             | StrOutputParser()
+            | RunnableLambda(print_output_and_return)
         )
         return table_summarization_chain
 
@@ -217,3 +228,42 @@ class ChainFactory:
         return chain
 
     # def build_insert_statement_chain(self):
+
+    def build_question_generation_chain(
+        self, model: ChatOpenAI, table_summary_chain: Runnable
+    ) -> Runnable:
+        """Output json is ['Question1', 'Question2', ..., 'QuestionN']"""
+        chain = (
+            {
+                "CustomerSummary": table_summary_chain,
+                "CustomerQuestion": itemgetter("customer_question"),
+            }
+            | PromptFactory.build_questions_from_user_summary()
+            | model
+            | StrOutputParser()
+            | RunnableLambda(PromptFactory.clean_string_v2)
+            | RunnableLambda(lambda x: json.loads(x))
+        )
+        return chain
+
+    def build_qa_chain(self, model: ChatOpenAI) -> Runnable:
+        def clean(x):
+            try:
+                y = json.loads(x)
+                return y
+            except Exception as ex:
+                logging.info(f"Exception when parsing JSON: {ex}")
+                print(f"Exception when parsing JSON: {ex}")
+                temp = """{"exception": "Something failed"}"""
+                y = json.loads(temp)
+                return y
+
+        chain = (
+            {"Chunk": itemgetter("chunk")}
+            | PromptFactory.build_training_qa_pairs()
+            | model
+            | StrOutputParser()
+            | RunnableLambda(PromptFactory.clean_string_v2)
+            | RunnableLambda(lambda x: clean(x))
+        )
+        return chain
