@@ -9,7 +9,7 @@ class PageContent(BaseModel):
     title: str
     keywords: List[str]
     summary: str
-    chunks: Optional[List[str]]
+    chunks: Optional[List[str]] = None
 
     def keywords_as_csv(self) -> str:
         """

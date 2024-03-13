@@ -20,14 +20,15 @@ class VectorStoreFactory:
         self.config_loader = config_loader
 
     def create_vector_store(self, store_type, **kwargs):
-        if store_type == "Cassandra":  # Native API interface for LangChain
-            return Cassandra(
-                embedding=self.embedding_manager.get_embedding(),
-                session=kwargs.get("session"),
-                keyspace=self.config_loader.get("keyspace"),
-                table_name=self.config_loader.get("table_name"),
-            )
-        elif store_type == "AstraDB":  # Data API interface for LangChain
+        # if store_type == "Cassandra":  # Native API interface for LangChain
+        #     return Cassandra(
+        #         embedding=self.embedding_manager.get_embedding(),
+        #         session=kwargs.get("session"),
+        #         keyspace=self.config_loader.get("keyspace"),
+        #         table_name=self.config_loader.get("table_name"),
+        #     )
+        # elif
+        if store_type == "AstraDB":  # Data API interface for LangChain
             return AstraDB(
                 embedding=self.embedding_manager.get_embedding(),
                 collection_name=kwargs.get("collection_name"),

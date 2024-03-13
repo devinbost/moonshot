@@ -26,6 +26,7 @@ from core.CollectionManager import CollectionManager
 from core.EmbeddingManager import EmbeddingManager
 
 from core.ConfigLoader import ConfigLoader
+from core.LLMFactory import LLMFactory
 from core.VectorStoreFactory import VectorStoreFactory
 from pydantic_models.TableSchema import TableSchema
 from pydantic_models.UserInfo import UserInfo
@@ -43,79 +44,8 @@ class Chatbot:
         self.column = None
         self.user_messages = [""]
         print("ran __init__ on Chatbot")
-        self.chat_history = []
-        self.memory = ConversationBufferMemory(
-            return_messages=True, memory_key="chat_history", output_key="answer"
-        )  # Set to false if we want to return a string instead of a list
-        provider = os.getenv("PROVIDER")
         self.data_access = data_access
-        if provider == "IBM":
-            self.model_id = "google/flan-t5-xxl"
-            self.credentials = {
-                "url": "https://us-south.ml.cloud.ibm.com",
-                "apikey": os.getenv("IBM_API_SECRET"),
-            }
-
-            gen_parms = {
-                "DECODING_METHOD": "greedy",
-                "MIN_NEW_TOKENS": 1,
-                "MAX_NEW_TOKENS": 50,
-            }
-
-            # I occasionally get a 443 CA error that appears to be intermittent. Need exponential backoff/retry.
-            self.legacy_model = Model(
-                self.model_id, self.credentials, gen_parms, os.getenv("IBM_PROJECT_ID")
-            )
-            self.langchain_model = WatsonxLLM(model=self.legacy_model)
-        elif provider == "OPENAI":
-            self.langchain_model = ChatOpenAI(temperature=0, model_name="gpt-4")
-
         self.relevant_table_cache = None
-
-    def run_inference_astrapy(
-        self,
-        terms_for_ann: str,
-        ann_length: int,
-        collection: str,
-        question: str,
-        vector_store_factory: VectorStoreFactory,
-    ) -> Any:
-        """
-        Runs inference using the AstraPy model with Approximate Nearest Neighbor (ANN) search.
-        Parameters:
-            terms_for_ann (str): Terms to be used for ANN search.
-            ann_length (int): The number of results to retrieve from the ANN search.
-            collection (str): The collection to search within.
-            question (str): The question to be answered.
-            vector_store_factory (VectorStoreFactory): The factory for creating the vector store.
-        Returns:
-            Any: The response from the inference.
-        """
-
-        vector_store = vector_store_factory.create_vector_store(
-            "AstraDB", collection_name=collection
-        )
-        results = vector_store.similarity_search(terms_for_ann, k=ann_length)
-        for doc in results:
-            doc.page_content = doc.page_content.replace("{", "{{").replace("}", "}}")
-        concatenated_content = "\nEXAMPLE: \n".join(
-            [doc.page_content for doc in results]
-        )
-
-        template = f"""{{question}}
-        
-        EXAMPLES: 
-        {concatenated_content}
-        """
-        # Create a prompt from the template
-        prompt = ChatPromptTemplate.from_template(template)
-
-        # Initialize the ChatOpenAI model
-        model = ChatOpenAI()
-        chain = prompt | model | StrOutputParser()
-        response = chain.invoke({"question": question})  # Replace with your question
-        logging.info(response)
-        return response
 
     def log_response(
         self,
@@ -217,16 +147,20 @@ class Chatbot:
 
         if self.relevant_table_cache is None:
             # Moved the instantiation of models and factories outside of the if-block to avoid unnecessary recreations
-            model = ChatOpenAI(model_name="gpt-4-1106-preview")
-            model35 = ChatOpenAI(model_name="gpt-3.5-turbo-1106")
-            factory = ChainFactory()
+
+            config_loader = ConfigLoader()
+            llm_factory = LLMFactory(config_loader)
+            chain_factory = ChainFactory(llm_factory)
+            model = llm_factory.create_llm_model("openai",model_name="gpt-4-1106-preview")
+
+            model35 = llm_factory.create_llm_model("openai",model_name="gpt-3.5-turbo-1106")
             data_access = (
                 self.data_access
             )  # Assuming self.data_access is already instantiated in __init__
 
             self.log_response("Start", "Inspecting hundreds of tables in the database")
 
-            relevant_tables = await factory.get_relevant_tables(
+            relevant_tables = await chain_factory.get_relevant_tables(
                 data_access, model, user_info
             )
             self.relevant_table_cache = relevant_tables
@@ -241,7 +175,7 @@ class Chatbot:
                 all_collection_keywords,
                 all_user_table_summaries,
                 data_access,
-                factory,
+                chain_factory,
                 keyword_list_slices,
                 model,
                 model35,
@@ -255,7 +189,7 @@ class Chatbot:
         all_table_insights = await asyncio.gather(*process_table_futures)
 
         recommendation = await self.generate_recommendation_async(
-            factory, model, all_user_table_summaries, all_table_insights, user_message
+            chain_factory, model, all_user_table_summaries, all_table_insights, user_message
         )
         self.our_responses.append(recommendation)
         self.log_response(

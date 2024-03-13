@@ -8,9 +8,9 @@ from pydantic_models.ColumnSchema import ColumnSchema
 class TableSchema(BaseModel):
     table_name: str
     keyspace_name: str
-    columns: Optional[List[ColumnSchema]]
-    indexes: Optional[List[str]]
-    keys: Optional[str]
+    columns: Optional[List[ColumnSchema]] = None
+    indexes: Optional[List[str]] = None
+    keys: Optional[str] = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

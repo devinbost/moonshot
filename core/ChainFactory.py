@@ -8,12 +8,13 @@ from langchain_core.runnables import RunnableLambda, RunnableParallel, Runnable
 
 import PromptFactory
 from DataAccess import DataAccess
+from core.LLMFactory import LLMFactory
 from pydantic_models.TableSchema import TableSchema
 
 
 class ChainFactory:
-    def __init__(self):
-        self.model35: ChatOpenAI = ChatOpenAI(model_name="gpt-3.5-turbo-1106")
+    def __init__(self, llm_factory: LLMFactory):
+        self.llm_factory = llm_factory
 
     def build_summarization_chain(
         self, model: ChatOpenAI, data_access: DataAccess, table_schema: TableSchema
@@ -48,7 +49,7 @@ class ChainFactory:
         table_summarization_chain: Runnable = (
             {"Information": select_with_where_chain}
             | PromptFactory.build_summarization_prompt()
-            | self.model35
+            | self.llm_factory.create_llm_model("openai", model_name="gpt-3.5-turbo-1106")
             | StrOutputParser()
         )
         return table_summarization_chain
