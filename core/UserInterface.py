@@ -42,7 +42,7 @@ class UserInterface:
         config_loader = ConfigLoader()
         self.vector_store_factory = VectorStoreFactory(embedding_manager, config_loader)
         self.astrapy_db = self.vector_store_factory.create_vector_store("AstraPyDB")
-        self.collection_manager = CollectionManager(self.astrapy_db, embedding_manager)
+        self.collection_manager = CollectionManager(self.astrapy_db, embedding_manager, "sitemapls")
 
     def setup_prompt_ui_components(self, column):
         prompt_search = column.text_input("Find prompt")
@@ -250,11 +250,10 @@ def build_reflection_menu(data_access, col1):
     # component_type = col1.selectbox("Component Type", ("Construction", "Inference"))
 
 
-def setup_sitemap_crawler_ui(column, crawler: Crawler):
+def setup_sitemap_crawler_ui(column, crawler: Crawler, collection_name: str, chunk_size: int, chunk_overlap: int):
     sitemaps = column.text_input(
         "Sitemap URLs to crawl as csv"
     )  # To do: Handle this input better
-    table_name = column.text_input("Collection to store data")
     if column.button("Crawl docs"):
         progress_bar = column.progress(0, "Percentage completion of site crawling")
         start = time.time()
@@ -265,9 +264,9 @@ def setup_sitemap_crawler_ui(column, crawler: Crawler):
         # I could update the ConfigLoader to first load from a YAML config file.
         vector_store_factory = VectorStoreFactory(embedding_manager, config_loader)
         vector_store = vector_store_factory.create_vector_store(
-            "AstraDB", collection_name=table_name
+            "AstraDB", collection_name=collection_name
         )
-        splitter_factory = SplitterFactory(chunk_size=300, chunk_overlap=150)
+        splitter_factory = SplitterFactory(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
         splitter = splitter_factory.create_splitter()
         crawler.async_crawl_and_ingest_list(
             sitemap_list, progress_bar, vector_store, splitter
@@ -318,9 +317,26 @@ def render_new(data_access: DataAccess, chatbot: Chatbot, crawler: Crawler):
             ),
         ]
     )
+
+    # Defaults:
+    collection_name = "sitemapls"
+    chunk_size = "300"
+    chunk_overlap = "150"
+    embedding_model = "all-MiniLM-L12-v2"
+
+    # Configurations UI section (for config overrides)
+    if col1.checkbox("Show configs", value=False):
+        # (Update values based on user input)
+        collection_name = col1.text_input("Name of KB collection name", collection_name)
+        chunk_size = col1.text_input("Chunk size", chunk_size)
+        chunk_overlap = col1.text_input("Chunk overlap", chunk_overlap)
+        embedding_model = col1.text_input("Huggingface embedding model to use", embedding_model)
+
     if col1.checkbox("Enable web crawler?", value=False):
-        setup_sitemap_crawler_ui(col2, crawler)
+        setup_sitemap_crawler_ui(col2, crawler, collection_name, int(chunk_size), int(chunk_overlap))
     user_chat_area = col1.text_area("Enter message here")
+    question_count = col1.text_input("Number of questions to ask for each table", "3")
+
     searched = col1.button("Search")
 
     summarization_limit = 3  # We can make this a config param
@@ -331,7 +347,8 @@ def render_new(data_access: DataAccess, chatbot: Chatbot, crawler: Crawler):
         try:
             loop.run_until_complete(
                 chatbot.answer_customer(
-                    user_chat_area, user_info, col2, col1, summarization_limit
+                    user_chat_area, user_info, col2, col1, summarization_limit, question_count, collection_name,
+                    embedding_model
                 )
             )
         finally:

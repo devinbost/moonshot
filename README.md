@@ -14,6 +14,8 @@ Alpha-stage library that could almost replace your customer support department.
 - [x] LangSmith integrated
 - [x] Cloud native
 - [x] Async
+- [ ] ColBERTv2 support (coming soon)
+- [ ] Graph neural network enhanced recommendations
 - [ ] LangServe compatible
 - [ ] Autonomous agent actions
 - [ ] Kubernetes native
@@ -29,7 +31,7 @@ Alpha-stage library that could almost replace your customer support department.
 - [ ] VertexAI support
 
 ## Hyperpersonalization architecture:
-![Example moonshot pipeline.png](img%2FExample%20moonshot%20pipeline.png)
+![moonshot_architecture_qa](img/moonshot_architecture_qa.png)
 
 ## Contributing
 Start by walking through the code in this method: [Personalization flow](https://github.com/devinbost/moonshot/blob/a62c38e8c68e88d78545797560cf3e760d17f87e/Chatbot.py#L178) 
@@ -128,6 +130,10 @@ Optionally, if you want integration with LangSmith, you will want to add these v
 - `LANGCHAIN_PROJECT`
 - `LANGCHAIN_TRACING_V2` (set to "true")
 These LangSmith variable values can be obtained as per LangChain documentation. 
+
+Also, make sure that the content and source roots are added to PYTHONPATH so you don't run into import problems.
+You can set those here:
+![python_path.png](img/python_path.png)
 
 Finally, apply the changes and click OK.
 
