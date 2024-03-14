@@ -129,6 +129,10 @@ Optionally, if you want integration with LangSmith, you will want to add these v
 - `LANGCHAIN_TRACING_V2` (set to "true")
 These LangSmith variable values can be obtained as per LangChain documentation. 
 
+Also, make sure that the content and source roots are added to PYTHONPATH so you don't run into import problems.
+You can set those here:
+![python_path.png](img/python_path.png)
+
 Finally, apply the changes and click OK.
 
 
