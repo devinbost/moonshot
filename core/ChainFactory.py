@@ -1,4 +1,5 @@
 import json
+import logging
 from operator import itemgetter
 from typing import List, Dict, Any
 
@@ -8,7 +9,9 @@ from langchain_core.runnables import RunnableLambda, RunnableParallel, Runnable
 
 import PromptFactory
 from DataAccess import DataAccess
+from core.CollectionManager import CollectionManager
 from core.LLMFactory import LLMFactory
+from pydantic_models.QAPair import QAPair
 from pydantic_models.TableSchema import TableSchema
 
 
@@ -143,19 +146,20 @@ class ChainFactory:
         return path_segment_keyword_chain
 
     def build_vector_search_summarization_chain(
-        self, model: ChatOpenAI, search_results: str
+        self, model: ChatOpenAI, search_results: str, llm_character_cut_off: int = 16000
     ) -> Runnable:
         """
         Builds a chain for summarizing vector search results.
         Parameters:
             model (ChatOpenAI): The model to be used for generating prompts and processing responses.
             search_results (str): The search results to be summarized.
+            llm_character_cut_off (int): The character limit for the LLM - after this value, everything is trimmed to prevent the LLM from giving an error due to too many tokens
         Returns:
             Runnable: A runnable chain for vector search result summarization.
         """
         if search_results is not None:
             collection_summary_chain = (
-                {"Information": RunnableLambda(lambda x: search_results[:16000])}
+                {"Information": RunnableLambda(lambda x: search_results[:llm_character_cut_off])}
                 | PromptFactory.build_summarization_prompt()
                 | model
                 | StrOutputParser()
@@ -217,4 +221,85 @@ class ChainFactory:
         )
         return chain
 
-    # def build_insert_statement_chain(self):
+    def build_question_generation_chain(
+        self, model: ChatOpenAI, table_summary_chain: Runnable
+    ) -> Runnable:
+        """Output json is ['Question1', 'Question2', ..., 'QuestionN']"""
+        chain = (
+            {
+                "CustomerSummary": table_summary_chain,
+                "CustomerQuestion": itemgetter("customer_question"),
+                "QuestionCount": itemgetter("question_count")
+            }
+            | PromptFactory.build_questions_from_user_summary()
+            | model
+            | StrOutputParser()
+            | RunnableLambda(PromptFactory.clean_string_v2)
+            | RunnableLambda(lambda x: json.loads(x))
+        )
+        return chain
+
+    def build_question_generation_chain_from_summary(
+            self, model: ChatOpenAI, question_count: str
+    ) -> Runnable:
+        """Output json is ['Question1', 'Question2', ..., 'QuestionN']"""
+        chain = (
+                {
+                    "CustomerSummary": itemgetter("table_summary"),
+                    "UserMessage": itemgetter("user_message"),
+                    "QuestionCount": itemgetter("question_count")
+                }
+                | PromptFactory.build_questions_from_user_summary()
+                | model
+                | StrOutputParser()
+                | RunnableLambda(PromptFactory.clean_string_v2)
+                | RunnableLambda(lambda x: json.loads(x))
+        )
+        return chain
+
+    async def invoke_answer_chain(
+        self, qa_chain, collection_manager: CollectionManager, question: str, vector_search_limit: int
+    ) -> QAPair:
+        search_results = await collection_manager.ANN_search_async(question, vector_search_limit)
+        answer = await qa_chain.ainvoke({"search_results": search_results,
+                                   "question": question})
+
+        qa_pair = QAPair(question = question, answer = answer)
+        return qa_pair
+
+    def build_answer_chain(self, model: ChatOpenAI) -> Runnable:
+        """Output is the answer to the provided question"""
+
+        chain = (
+                {
+                    "SearchResults": itemgetter("search_results"),
+                    "Question": itemgetter("question")
+                }
+                | PromptFactory.rag_qa_chain()
+                | model
+                | StrOutputParser()
+        )
+        return chain
+
+    @DeprecationWarning
+    def build_qa_chain(self, model: ChatOpenAI) -> Runnable:
+        def clean(x):
+            try:
+                y = json.loads(x)
+                return y
+            except Exception as ex:
+                logging.info(f"Exception when parsing JSON: {ex}")
+                print(f"Exception when parsing JSON: {ex}")
+                temp = """{"exception": "Something failed"}"""
+                y = json.loads(temp)
+                return y
+
+        chain = (
+            {"Chunk": itemgetter("chunk")}
+            | PromptFactory.build_training_qa_pairs()
+            | model
+            | StrOutputParser()
+            | RunnableLambda(PromptFactory.clean_string_v2)
+            | RunnableLambda(lambda x: clean(x))
+        )
+        return chain

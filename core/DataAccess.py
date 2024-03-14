@@ -72,7 +72,7 @@ class DataAccess:
         self.vector_store_factory = vector_store_factory
         self.astrapy_db = self.vector_store_factory.create_vector_store("AstraPyDB")
         self.collection_manager = CollectionManager(
-            self.astrapy_db, self.embedding_manager
+            self.astrapy_db, self.embedding_manager, "sitemapls"
         )
         self.output_variables = ["new"]
         self.data_map = {}

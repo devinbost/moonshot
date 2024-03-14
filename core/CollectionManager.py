@@ -15,10 +15,12 @@ class CollectionManager:
     """
 
     def __init__(
-        self, astrapy_db: AstraDB | AsyncAstraDB, embedding_manager: EmbeddingManager
+        self, astrapy_db: AstraDB | AsyncAstraDB, embedding_manager: EmbeddingManager, collection_name: str
     ):
         self.astrapy_db = astrapy_db
         self.embedding_manager = embedding_manager
+        self.collection_name = collection_name
+
         self.embedding_model = self.embedding_manager.get_sentence_transformer()
 
     def save_prompt(self, prompt: str) -> None:
@@ -123,6 +125,41 @@ class CollectionManager:
                     "nlp_keywords are: " + result["metadata"]["nlp_keywords"]
                 )  # TODO: Remove ^ after testing
                 print("content is: " + result["content"])
+            result_contents = [result["content"] for result in results]
+            return json.dumps(result_contents)
+        except Exception as ex:
+            logging.error("Error reading from DB. Exception: " + str(ex))
+            return ""
+
+    async def ANN_search_async(
+        self, question: str, limit: int
+    ) -> str:
+        """
+        Perform an Approximate Nearest Neighbor (ANN) search with a filter and user summary asynchronously,
+        returning the results as a JSON string, using asyncio.to_thread to run in a separate thread.
+        Parameters:
+            collection_filter (Dict[str, str]): A dictionary to filter the collection.
+            question (str): The search query.
+        Returns:
+            str: A JSON string representing the search results.
+        """
+        input_vector: List[float] = self.embedding_model.encode(
+            question
+        ).tolist()
+        collection = AsyncAstraDBCollection(
+            collection_name=self.collection_name, astra_db=self.astrapy_db
+        )
+
+        try:
+            results: List[Dict[str, Any]] = await collection.vector_find(
+                vector=input_vector,
+                limit=limit,
+            )
+            # for result in results:
+            #     print(
+            #         "nlp_keywords are: " + result["metadata"]["nlp_keywords"]
+            #     )  # TODO: Remove ^ after testing
+            #     print("content is: " + result["content"])
             result_contents = [result["content"] for result in results]
             return json.dumps(result_contents)
         except Exception as ex:

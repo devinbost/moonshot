@@ -29,6 +29,7 @@ class VectorStoreFactory:
         #     )
         # elif
         if store_type == "AstraDB":  # Data API interface for LangChain
+            # Future version should use this instead: https://github.com/langchain-ai/langchain-datastax/tree/main/libs/astradb
             return AstraDB(
                 embedding=self.embedding_manager.get_embedding(),
                 collection_name=kwargs.get("collection_name"),
