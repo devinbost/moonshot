@@ -14,6 +14,8 @@ Alpha-stage library that could almost replace your customer support department.
 - [x] LangSmith integrated
 - [x] Cloud native
 - [x] Async
+- [ ] ColBERTv2 support (coming soon)
+- [ ] Graph neural network enhanced recommendations
 - [ ] LangServe compatible
 - [ ] Autonomous agent actions
 - [ ] Kubernetes native
@@ -29,7 +31,7 @@ Alpha-stage library that could almost replace your customer support department.
 - [ ] VertexAI support
 
 ## Hyperpersonalization architecture:
-![Example moonshot pipeline.png](img%2FExample%20moonshot%20pipeline.png)
+![moonshot_v2_architecture](img/moonshot_v2_architecture.png)
 
 ## Contributing
 Start by walking through the code in this method: [Personalization flow](https://github.com/devinbost/moonshot/blob/a62c38e8c68e88d78545797560cf3e760d17f87e/Chatbot.py#L178) 
