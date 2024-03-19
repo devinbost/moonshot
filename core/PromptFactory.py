@@ -466,10 +466,9 @@ def build_questions_from_user_summary() -> PromptTemplate:
     prompt = (
             get_helpful_assistant_prefix()
             + "I will give you a summary of what we know about a customer's interactions with my business. "
-              "I want you to formulate a list of {QuestionCount} example questions that the customer might want to ask our public documentation. "
-              "Please ensure the questions you generate are relevant to their current question. If no current "
-              "question or message is provided by the customer, try your best based on the information I have provided."
-              " Return the list of questions as a valid JSON array. "
+              "Based only on the information here, I want you to formulate a list of {QuestionCount} example questions that the customer might want to ask our public documentation. "
+              "If no current question or message is provided by the customer, generate questions anyway. "
+              "Return the list of questions as a valid JSON array. "
               ""
               "Here is the summary:"
               ""

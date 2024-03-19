@@ -4,7 +4,7 @@ from Chatbot import Chatbot
 from Crawler import Crawler
 from DataAccess import DataAccess
 from SitemapCrawler import SitemapCrawler
-from UserInterface import UserInterface, render_new
+from UserInterface import UserInterface
 from core.ConfigLoader import ConfigLoader
 from core.EmbeddingManager import EmbeddingManager
 from core.VectorStoreFactory import VectorStoreFactory
@@ -20,19 +20,12 @@ class Main:
             config_loader, embedding_manager, vector_store_factory
         )
         self.crawler: Crawler = Crawler(self.data_access)
-        self.chatbot: Chatbot = None
         self.sitemap_crawler: SitemapCrawler = SitemapCrawler()
-
-    def startChatbot(self):
-        print("ran startChatbot")
-        if self.chatbot is None:
-            self.chatbot = Chatbot(self.data_access)
 
     def buildUI(self):
         print("ran buildUI")
-        self.startChatbot()
-        ui = UserInterface(self.chatbot, self.crawler, self.sitemap_crawler)
-        render_new(self.data_access, ui.chatbot, ui.crawler)
+        ui = UserInterface(self.crawler, self.sitemap_crawler)
+        ui.render_new(self.data_access, ui.crawler)
 
 
 def main():
