@@ -1,5 +1,5 @@
 
-use telecom;
+use default_keyspace;
 
 CREATE TABLE family_plans (
     phone_number TEXT,

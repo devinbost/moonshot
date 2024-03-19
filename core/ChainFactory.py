@@ -57,28 +57,6 @@ class ChainFactory:
         )
         return table_summarization_chain
 
-    @DeprecationWarning
-    def build_summarization_chain_set(
-        self, model: ChatOpenAI, data_access: DataAccess, tables: List[TableSchema]
-    ) -> RunnableParallel:
-        """
-        Builds a set of summarization chains for a list of table schemas.
-        Parameters:
-            model (ChatOpenAI): The model to be used for generating prompts and processing responses.
-            data_access (DataAccess): The data access object for executing queries.
-            tables (List[TableSchema]): A list of table schemas to be summarized.
-        Returns:
-            RunnableParallel: A parallel runnable chain for summarizing multiple tables.
-        """
-        chains = [
-            self.build_summarization_chain(model, data_access, table)
-            for table in tables
-        ]
-        chain_kwargs = {f"chain{i+1}": chain for i, chain in enumerate(chains)}
-        # Pass the dictionary as keyword arguments
-        summarization_chains = RunnableParallel(**chain_kwargs)
-        return summarization_chains
-
     def build_keyword_reduction_prompt_chain(
         self, model: ChatOpenAI, user_info_summary: Any, keywords: List[str]
     ):
@@ -101,47 +79,6 @@ class ChainFactory:
             | StrOutputParser()
             | RunnableLambda(PromptFactory.clean_string_v2)
             | RunnableLambda(lambda x: clean(x))
-        )
-        return path_segment_keyword_chain
-
-    def build_collection_predicate_chain(
-        self,
-        model: ChatOpenAI,
-        table_summarization: str,
-        all_keywords: Dict[str, List[str]],
-    ) -> Runnable:
-        """
-        Builds a non-parallel version 2 chain for collection predicate extraction.
-        Parameters:
-            model (ChatOpenAI): The model to be used for generating prompts and processing responses.
-            table_summarization (str): The summarization of table data.
-            all_keywords (Dict[str, List[str]]): A dictionary of all keywords to be considered.
-        Returns:
-            Runnable: A runnable chain for collection predicate extraction.
-            that Returns list of filters like this: [{{"metadata.path_segment_X": "VALUE"}}]
-        """
-        all_keywords_string: str = json.dumps(all_keywords)
-        # print("All Keywords String:", all_keywords_string)
-        # print("Table Summarization:", table_summarization)
-
-        path_segment_values_lambda = RunnableLambda(lambda x: all_keywords_string)
-        user_information_summary_lambda = RunnableLambda(lambda x: table_summarization)
-
-        # print("Path Segment Values Lambda:", path_segment_values_lambda)
-        # print("User Information Summary Lambda:", user_information_summary_lambda)
-        #
-        # prompt_factory_result = PromptFactory.build_collection_vector_find_prompt_v2()
-        # print("Prompt Factory Result:", prompt_factory_result)
-        path_segment_keyword_chain = (
-            {
-                "PathSegmentValues": path_segment_values_lambda,
-                "UserInformationSummary": user_information_summary_lambda,
-            }
-            | PromptFactory.build_collection_vector_find_prompt_v5()
-            | model
-            | StrOutputParser()
-            | RunnableLambda(PromptFactory.clean_string_v2)
-            | RunnableLambda(lambda x: json.loads(x))
         )
         return path_segment_keyword_chain
 
@@ -201,46 +138,8 @@ class ChainFactory:
         )
         return relevant_tables
 
-    def build_company_description_chain(self, model: ChatOpenAI) -> Runnable:
-        chain = (
-            {"MissionStatement": itemgetter("mission_statement")}
-            | PromptFactory.build_company_description_data()
-            | model
-            | StrOutputParser()
-        )
-        return chain
-
-    def build_create_table_chain(
-        self, model: ChatOpenAI, business_description_chain: Runnable
-    ) -> Runnable:
-        chain = (
-            {"BusinessDescription": business_description_chain}
-            | PromptFactory.build_example_create_table_statements()
-            | model
-            | StrOutputParser()
-        )
-        return chain
-
-    def build_question_generation_chain(
-        self, model: ChatOpenAI, table_summary_chain: Runnable
-    ) -> Runnable:
-        """Output json is ['Question1', 'Question2', ..., 'QuestionN']"""
-        chain = (
-            {
-                "CustomerSummary": table_summary_chain,
-                "CustomerQuestion": itemgetter("customer_question"),
-                "QuestionCount": itemgetter("question_count")
-            }
-            | PromptFactory.build_questions_from_user_summary()
-            | model
-            | StrOutputParser()
-            | RunnableLambda(PromptFactory.clean_string_v2)
-            | RunnableLambda(lambda x: json.loads(x))
-        )
-        return chain
-
     def build_question_generation_chain_from_summary(
-            self, model: ChatOpenAI, question_count: str
+            self, model: ChatOpenAI
     ) -> Runnable:
         """Output json is ['Question1', 'Question2', ..., 'QuestionN']"""
         chain = (
@@ -278,28 +177,5 @@ class ChainFactory:
                 | PromptFactory.rag_qa_chain()
                 | model
                 | StrOutputParser()
-        )
-        return chain
-
-    @DeprecationWarning
-    def build_qa_chain(self, model: ChatOpenAI) -> Runnable:
-        def clean(x):
-            try:
-                y = json.loads(x)
-                return y
-            except Exception as ex:
-                logging.info(f"Exception when parsing JSON: {ex}")
-                print(f"Exception when parsing JSON: {ex}")
-                temp = """{"exception": "Something failed"}"""
-                y = json.loads(temp)
-                return y
-
-        chain = (
-            {"Chunk": itemgetter("chunk")}
-            | PromptFactory.build_training_qa_pairs()
-            | model
-            | StrOutputParser()
-            | RunnableLambda(PromptFactory.clean_string_v2)
-            | RunnableLambda(lambda x: clean(x))
         )
         return chain

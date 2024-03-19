@@ -1,27 +1,15 @@
 import asyncio
 import json
 import logging
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from operator import itemgetter
 from typing import List, Dict, Any, Tuple, cast
 
-from langchain.chains import ConversationalRetrievalChain
-from langchain_core.prompts import ChatPromptTemplate
-from pydantic.v1.json import pydantic_encoder
-
 import PromptFactory
 from ChainFactory import ChainFactory
 from DataAccess import DataAccess
-import os
-from ibm_watson_machine_learning.foundation_models import Model
-from ibm_watson_machine_learning.foundation_models.extensions.langchain import (
-    WatsonxLLM,
-)
-from langchain.memory import ConversationBufferMemory
 from langchain.chat_models import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import Runnable, RunnableLambda
 
 from core.CollectionManager import CollectionManager
 from core.EmbeddingManager import EmbeddingManager
@@ -30,13 +18,12 @@ from core.ConfigLoader import ConfigLoader
 from core.LLMFactory import LLMFactory
 from core.VectorStoreFactory import VectorStoreFactory
 from pydantic_models.QAPair import QAPair
-from pydantic_models.TableSchema import TableSchema
 from pydantic_models.UserInfo import UserInfo
 
 
 class Chatbot:
     # Need to refactor this class at some point to support multiple LLM providers
-    def __init__(self, data_access: DataAccess):
+    def __init__(self, embedding_model: str, collection_name: str):
         """
         Initialize the Chatbot with a data access object.
         Parameters:
@@ -46,8 +33,20 @@ class Chatbot:
         self.column = None
         self.user_messages = [""]
         print("ran __init__ on Chatbot")
-        self.data_access = data_access
         self.relevant_table_cache = None
+
+        config_loader = ConfigLoader()
+        self.llm_factory = LLMFactory(config_loader)
+        self.chain_factory = ChainFactory(self.llm_factory)
+        self.embedding_manager = EmbeddingManager(model_name=embedding_model) # TODO: pull this up so people can change it
+        self.vectorstore_factory = VectorStoreFactory(self.embedding_manager, config_loader)
+        self.astrapydb = self.vectorstore_factory.create_vector_store("AstraPyDB")
+        self.collection_manager = CollectionManager(self.astrapydb, self.embedding_manager, collection_name)
+        self.data_access = DataAccess(config_loader, self.embedding_manager, self.vectorstore_factory)
+
+        # TODO: inject these into the constructor instead.
+        self.model = self.llm_factory.create_llm_model("openai", model_name="gpt-4-1106-preview")
+        self.model35 = self.llm_factory.create_llm_model("openai", model_name="gpt-3.5-turbo-1106")
 
     def log_response(
         self,
@@ -134,9 +133,7 @@ class Chatbot:
         column: Any,
         col1,
         summarization_limit,
-        question_count: str,
-        collection_name: str,
-        embedding_model: str
+        question_count: str
     ) -> str:
         """
         Provides an answer to the customer's query.
@@ -152,25 +149,14 @@ class Chatbot:
 
         if self.relevant_table_cache is None:
             # Moved the instantiation of models and factories into if-block to avoid unnecessary recreations
-
-            config_loader = ConfigLoader()
-            llm_factory = LLMFactory(config_loader)
-            chain_factory = ChainFactory(llm_factory)
-            embedding_manager = EmbeddingManager(model_name=embedding_model) # TODO: pull this up so people can change it
-            vectorstore_factory = VectorStoreFactory(embedding_manager, config_loader)
-            astrapydb = vectorstore_factory.create_vector_store("AstraPyDB")
-            collection_manager = CollectionManager(astrapydb, embedding_manager, collection_name)
-            model = llm_factory.create_llm_model("openai",model_name="gpt-4-1106-preview")
-
-            model35 = llm_factory.create_llm_model("openai",model_name="gpt-3.5-turbo-1106")
             data_access = (
                 self.data_access
             )  # Assuming self.data_access is already instantiated in __init__
 
             self.log_response("Start", "Inspecting hundreds of tables in the database")
 
-            relevant_tables = await chain_factory.get_relevant_tables(
-                data_access, model, user_info
+            relevant_tables = await self.chain_factory.get_relevant_tables(
+                data_access, self.model, user_info
             )
             self.relevant_table_cache = relevant_tables
 
@@ -179,10 +165,9 @@ class Chatbot:
         process_table_futures = [
             self.process_table_async(
                 all_generated_questions,
-                collection_manager,
-                chain_factory,
-                model,
-                model35,
+                self.collection_manager,
+                self.model,
+                self.model35,
                 table,
                 user_info,
                 summarization_limit,
@@ -195,7 +180,7 @@ class Chatbot:
         all_resolved_qa_pairs = await asyncio.gather(*process_table_futures)
 
         recommendation = await self.generate_recommendation_async(
-            chain_factory, model, all_generated_questions, all_resolved_qa_pairs, user_message
+            self.model, all_generated_questions, all_resolved_qa_pairs, user_message
         )
         self.our_responses.append(recommendation)
         self.log_response(
@@ -208,7 +193,6 @@ class Chatbot:
         self,
         all_generated_questions,
         collection_manager: CollectionManager,
-        chain_factory: ChainFactory,
         model,
         model35,
         table,
@@ -219,9 +203,9 @@ class Chatbot:
     ) -> List[QAPair]:
         self.log_response("Found Table", f"Found relevant table: {table.table_name}")
         table_summarization = await self.summarize_table_async(
-            chain_factory, model, table, user_info
+            model, table, user_info
         )
-        generated_questions = await self.generate_questions_async(chain_factory, model, table_summarization, user_message,
+        generated_questions = await self.generate_questions_async(model, table_summarization, user_message,
                                                                   question_count)
         for question in generated_questions:
             all_generated_questions.append(question) # Perhaps we should instead append generated_questions directly instead of this loop.
@@ -229,7 +213,6 @@ class Chatbot:
         answers_to_generated_questions = await self.answer_generated_questions_async(
             generated_questions,
             model,
-            chain_factory,
             collection_manager,
             summarization_limit,
         )
@@ -245,16 +228,15 @@ class Chatbot:
         self,
         generated_questions: List[str],
         model: ChatOpenAI,
-        chain_factory: ChainFactory,
         collection_manager: CollectionManager,
         vector_search_limit: int,
     ) -> List[QAPair]:
         """Returns """
-        qa_chain = chain_factory.build_answer_chain(model)
+        qa_chain = self.chain_factory.build_answer_chain(model)
         # Note that this cast used below is just for the type hint. It's a no-op at runtime.
         answered_question_pairs = cast(List[QAPair], await asyncio.gather(
             *[
-                chain_factory.invoke_answer_chain(qa_chain, collection_manager, question, vector_search_limit)
+                self.chain_factory.invoke_answer_chain(qa_chain, collection_manager, question, vector_search_limit)
                 for question in generated_questions
             ]
         ))
@@ -299,22 +281,8 @@ class Chatbot:
             keyword_list_slices.extend(list_slices)
         return keyword_list_slices
 
-    @DeprecationWarning
-    def summarize_table(self, factory, model, table, user_info):
-        table_summarization_chain = factory.build_summarization_chain(
-            model, self.data_access, table
-        )
-        table_summarization = table_summarization_chain.invoke(
-            {"user_info_not_summary": user_info}
-        )
-        self.log_response(
-            "Table Summary",
-            f"Summary of what we know about customer from this table:\n\n {table_summarization}",
-        )
-        return table_summarization
-
-    async def summarize_table_async(self, factory, model, table, user_info):
-        table_summarization_chain = factory.build_summarization_chain(
+    async def summarize_table_async(self, model, table, user_info):
+        table_summarization_chain = self.chain_factory.build_summarization_chain(
             model, self.data_access, table
         )
         table_summarization = await table_summarization_chain.ainvoke(
@@ -326,28 +294,11 @@ class Chatbot:
         )
         return table_summarization
 
-    async def generate_questions_async(self, factory: ChainFactory, model, table_summary: str, user_message: str,
+    async def generate_questions_async(self, model, table_summary: str, user_message: str,
                                        question_count: str):
-        question_generation_chain = factory.build_question_generation_chain_from_summary(model, question_count)
+        question_generation_chain = self.chain_factory.build_question_generation_chain_from_summary(model)
         questions = await question_generation_chain.ainvoke(
             {"table_summary": table_summary,
-             "user_message": user_message,
-             "question_count": question_count}
-        )
-        self.log_response(
-            "Questions",
-            f"Here are some questions we think might be relevant for the user:\n\n {questions}",
-        )
-        return questions
-    async def summarize_table_and_generate_questions_async(self, factory: ChainFactory, model, table, user_info,
-                                                           user_message: str, question_count: str):
-        """This method version is for if we want to use a larger LCEL chain rather than breaking up the steps."""
-        table_summarization_chain = factory.build_summarization_chain(
-            model, self.data_access, table
-        )
-        question_generation_chain = factory.build_question_generation_chain(model, table_summarization_chain)
-        questions = await question_generation_chain.ainvoke(
-            {"user_info_not_summary": user_info,
              "user_message": user_message,
              "question_count": question_count}
         )
@@ -382,28 +333,6 @@ class Chatbot:
         result = await chain.ainvoke({})
         return key, result
 
-    @DeprecationWarning
-    def reduce_keywords(
-        self, model35, factory, table_summarization, keyword_list_slices
-    ):
-        keyword_reduction_chains = [
-            (
-                slice_[0],
-                factory.build_keyword_reduction_prompt_chain(
-                    model35, table_summarization, slice_[1]
-                ),
-            )
-            for slice_ in keyword_list_slices
-        ]
-        with ThreadPoolExecutor() as executor:
-            reduced_keyword_list = list(
-                executor.map(
-                    lambda keyed_chain: (keyed_chain[0], keyed_chain[1].invoke({})),
-                    keyword_reduction_chains,
-                )
-            )
-        return reduced_keyword_list
-
     def deduplicate_keywords(self, reduced_keyword_list):
         deduped_segment_keywords = {}
         for key, result in reduced_keyword_list:
@@ -419,92 +348,6 @@ class Chatbot:
                 value for value in values if value in all_collection_keywords[key]
             ]
         return real_deduped_keys
-
-    @DeprecationWarning
-    def identify_predicates(
-        self, factory, model, table_summarization, real_deduped_keys
-    ):
-        predicate_identification_chain = factory.build_collection_predicate_chain(
-            model, table_summarization, real_deduped_keys
-        )
-        return predicate_identification_chain.invoke({})
-
-    async def identify_predicates_async(
-        self, factory, model, table_summarization, real_deduped_keys
-    ):
-        predicate_identification_chain = factory.build_collection_predicate_chain(
-            model, table_summarization, real_deduped_keys
-        )
-        return await predicate_identification_chain.ainvoke({})
-
-    async def summarize_topics_async(
-        self,
-        collection_predicates,
-        table_summarization,
-        model,
-        factory,
-        data_access,
-        limit: int,
-    ):
-        tasks = [
-            self.process_topic_summary_async(
-                predicate, table_summarization, model, factory, data_access, limit
-            )
-            for predicate in collection_predicates
-        ]
-        return await asyncio.gather(*tasks)
-
-    @DeprecationWarning
-    def summarize_topics(
-        self, collection_predicates, table_summarization, model, factory, data_access
-    ):
-        with ThreadPoolExecutor() as executor:
-            topic_summaries_for_table = list(
-                executor.map(
-                    lambda predicate: self.process_topic_summary(
-                        predicate, table_summarization, model, factory, data_access
-                    ),
-                    collection_predicates,
-                )
-            )
-        return topic_summaries_for_table
-
-    @DeprecationWarning
-    async def process_topic_summary_async(
-        self, predicate, table_summarization, model, factory, data_access, limit: int
-    ):
-        search_results_for_topic = (
-            await data_access.collection_manager.filtered_ANN_search_async(
-                predicate, table_summarization, limit
-            )
-        )
-        summarization_of_topic_chain = factory.build_vector_search_summarization_chain(
-            model, search_results_for_topic
-        )
-        return await summarization_of_topic_chain.ainvoke({})
-
-
-    @DeprecationWarning
-    def process_topic_summary(
-        self, predicate, table_summarization, model, factory, data_access
-    ):
-        search_results_for_topic = data_access.collection_manager.filtered_ANN_search(
-            predicate, table_summarization
-        )
-        summarization_of_topic = factory.build_vector_search_summarization_chain(
-            model, search_results_for_topic
-        ).invoke({})
-        return summarization_of_topic
-
-    @DeprecationWarning
-    def summarize_findings(self, factory, model, topic_summaries_for_table):
-        topic_summaries_for_table_as_string = json.dumps(topic_summaries_for_table)
-        summarization_of_findings_for_table = (
-            factory.build_vector_search_summarization_chain(
-                model, topic_summaries_for_table_as_string
-            )
-        )
-        return summarization_of_findings_for_table.invoke({})
 
     async def summarize_findings_async(self, factory, model, topic_summaries_for_table):
         topic_summaries_for_table_as_string = json.dumps(topic_summaries_for_table)
@@ -525,27 +368,10 @@ class Chatbot:
         )
         return await summarization_of_findings_for_table.ainvoke({})
 
-    @DeprecationWarning
-    def generate_recommendation(
-        self, factory, model, all_user_table_summaries, all_table_insights, user_message
-    ):
-        recommendation_chain = factory.build_final_recommendation_chain_non_parallel(
-            model
-        )
-        recommendation = recommendation_chain.invoke(
-            {
-                "user_summary": all_user_table_summaries,
-                "business_summary": all_table_insights,
-                "user_messages": [user_message],
-                "our_responses": self.our_responses[::-1],
-            }
-        )
-        return recommendation
-
     async def generate_recommendation_async(
-        self, factory, model, all_user_table_summaries, all_table_insights, user_message
+        self, model, all_user_table_summaries, all_table_insights, user_message
     ):
-        recommendation_chain = factory.build_final_recommendation_chain_non_parallel(
+        recommendation_chain = self.chain_factory.build_final_recommendation_chain_non_parallel(
             model
         )
         recommendation = await recommendation_chain.ainvoke(

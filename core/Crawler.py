@@ -11,7 +11,7 @@ from streamlit.delta_generator import DeltaGenerator
 from DataAccess import DataAccess
 import logging
 from datetime import datetime
-
+import os
 from typing import List
 
 from pydantic_models.PageContent import PageContent
@@ -68,7 +68,10 @@ class Crawler:
                 ]
             else:
                 urls = [loc.text for loc in soup.find_all("loc")]
-            with open(f"logs/urls.txt-{timestamp_str}", "w") as file:
+            logs_directory = "logs"
+            if not os.path.exists(logs_directory):
+                os.makedirs(logs_directory)
+            with open(f"{logs_directory}/urls.txt-{timestamp_str}", "w") as file:
                 for url in urls:
                     file.write("%s\n" % url)
         return urls

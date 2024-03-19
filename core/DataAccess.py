@@ -661,27 +661,6 @@ RESULTS:"""
         clean_result = ClassInspector.remove_json_formatting(result)
         return clean_result
 
-    @DeprecationWarning
-    def map_tables_and_populate(self, json_string: str) -> List[TableSchema]:
-        """
-        Convert a JSON string to a list of populated TableSchema objects.
-        Parameters:
-            json_string (str): A JSON string representing table schemas.
-        Returns:
-            List[TableSchema]: A list of populated TableSchema objects derived from the JSON string.
-        """
-        data = json.loads(json_string)
-        table_schemas = [
-            TableSchema(
-                keyspace_name=obj["keyspace_name"], table_name=obj["table_name"]
-            )
-            for obj in data
-        ]
-        populated: List[TableSchema] = [
-            self.set_table_metadata_and_return(table) for table in table_schemas
-        ]
-        return populated
-
     async def map_tables_and_populate_async(
         self, json_string: str
     ) -> List[TableSchema]:
@@ -762,51 +741,6 @@ RESULTS:"""
         table_schema.indexes = indexes
         table_schema.columns = columns
         return table_schema
-
-    @DeprecationWarning
-    def get_path_segment_keywords(self) -> Dict[str, List[str]]:
-        """
-        Retrieve and return a dictionary of distinct path segment keywords from the default Cassandra keyspace.
-        Returns:
-            Dict[str, List[str]]: A dictionary where each key is a metadata path segment and the value is a list of distinct keywords.
-        """
-        query = SimpleStatement(
-            f"""SELECT query_text_values['metadata.subdomain'] as subdomain,
-         query_text_values['metadata.path_segment_1'] as seg1,
-         query_text_values['metadata.path_segment_2'] as seg2,
-         query_text_values['metadata.path_segment_3'] as seg3,
-         query_text_values['metadata.path_segment_4'] as seg4,
-         query_text_values['metadata.path_segment_5'] as seg5,
-         query_text_values['metadata.path_segment_6'] as seg6,
-         query_text_values['metadata.title'] as title,
-         query_text_values['metadata.nlp_keywords'] as keywords
-         FROM default_keyspace.sitemapls;"""
-        )
-        session = self.getCqlSession()
-        # execute the query
-        session.default_timeout = 120
-        results = session.execute(query)
-
-        # Convert results to a DataFrame
-        df = pd.DataFrame(results)
-        # distinct_seg1 = df["seg1"].unique().tolist()
-        filtered_df = df[
-            ~df["seg2"].str.contains("knowledge-base", na=False)
-            & ~df["seg2"].str.contains("legal", na=False)
-        ]
-        distinct_seg2 = [x for x in filtered_df["seg2"].unique() if x is not None]
-        distinct_seg3 = [x for x in df["seg3"].unique() if x is not None]
-        distinct_seg4 = [x for x in df["seg4"].unique() if x is not None]
-        # distinct_seg5 = df["seg5"].unique().tolist()
-        # distinct_seg6 = df["seg6"].unique().tolist()
-        distinct_values_dict = {
-            "metadata.path_segment_2": distinct_seg2,
-            "metadata.path_segment_3": distinct_seg3,
-            "metadata.path_segment_4": distinct_seg4,
-            # "metadata.path_segment_5": distinct_seg5,
-            # "metadata.path_segment_6": distinct_seg6,
-        }
-        return distinct_values_dict
 
     async def get_path_segment_keywords_async(self) -> Dict[str, List[str]]:
         """
