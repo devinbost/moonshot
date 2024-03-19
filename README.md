@@ -157,3 +157,5 @@ For this reason, we used a semi-structured approach to code generation where we 
 This hybrid approach is easier to control for security and auth purposes as well since authorization can be checked before code is executed.
 
 Dong, X., Zhang, C., Ge, Y., Mao, Y., Gao, Y., Lin, J., & Lou, D. (2023). C3: Zero-shot Text-to-SQL with ChatGPT. arXiv preprint arXiv:2307.07306.
+
+---
