@@ -176,14 +176,6 @@ astradb:
   ASTRA_ENDPOINT: "https://....apps.astra.datastax.com"
   SECURE_BUNDLE_PATH: "/absolute/path/to/secure-connect.zip"
 llm:
-  watsonx:
-    required:
-      IBM_API_SECRET: "mysecret"
-      IBM_PROJECT_ID: "my-id"
-  openai:
-    required:
-      OPENAI_API_KEY: "mysecret"
-      MODEL_NAME: "gpt-4-1106-preview"
   azure:
     required:
       AZURE_OPENAI_API_KEY: "mykey"
@@ -192,7 +184,14 @@ llm:
       AZURE_DEPLOYMENT: "example-gpt-4"
     optional:
       AZURE_MODEL_VERSION: "your_azure_model_version"
-
+  openai:
+    required:
+      OPENAI_API_KEY: "mysecret"
+      MODEL_NAME: "gpt-4-1106-preview"
+  watsonx:
+    required:
+      IBM_API_SECRET: "mysecret"
+      IBM_PROJECT_ID: "my-id"
 langsmith:
   required:
     LANGCHAIN_API_KEY: "mykey"
@@ -201,13 +200,13 @@ langsmith:
     LANGCHAIN_TRACING_V2: "true"
 
 embedding:
-  sentence_transformer:
-    required:
-      MODEL_NAME: "all-MiniLM-L12-v2"
   azure:
     required:
       AZURE_DEPLOYMENT: "example-embeddings"
       OPENAI_API_VERSION: "2023-05-15"
+  huggingface:
+    required:
+      MODEL_NAME: "all-MiniLM-L12-v2"
 ```
 
 ## Research influences:
