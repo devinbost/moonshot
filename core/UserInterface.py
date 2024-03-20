@@ -16,15 +16,18 @@ from ClassInspector import (
 )
 from core.CollectionManager import CollectionManager
 from core.ConfigLoader import ConfigLoader
-from core.EmbeddingManager import EmbeddingManager
+
+from core.EmbeddingFactory import EmbeddingFactory
+from core.LLMFactory import LLMFactory
 from core.SplitterFactory import SplitterFactory
 from core.VectorStoreFactory import VectorStoreFactory
+from core.adapters.EmbeddingInterface import EmbeddingInterface
 from pydantic_models.ComponentData import ComponentData
 from DataAccess import DataAccess
 from pydantic_models.PropertyInfo import PropertyInfo
 from pydantic_models.TableDescription import TableDescription
 from pydantic_models.UserInfo import UserInfo
-
+from langchain.vectorstores import AstraDB
 
 class UserInterface:
     def __init__(
@@ -36,15 +39,10 @@ class UserInterface:
         self.app_name = "Chatbot demo"
         self.crawler = crawler
         self.sitemap_crawler = sitemap_crawler
-        embedding_manager = EmbeddingManager()
-        config_loader = ConfigLoader()
-        self.vector_store_factory = VectorStoreFactory(embedding_manager, config_loader)
-        self.astrapy_db = self.vector_store_factory.create_vector_store("AstraPyDB")
-        self.collection_manager = CollectionManager(self.astrapy_db, embedding_manager, "sitemapls")
 
-    def setup_prompt_ui_components(self, column):
+    def setup_prompt_ui_components(self, column, collection_manager: CollectionManager):
         prompt_search = column.text_input("Find prompt")
-        matching_prompts = self.collection_manager.get_matching_prompts(prompt_search)
+        matching_prompts = collection_manager.get_matching_prompts(prompt_search)
         prompts = [s["prompt"] for s in matching_prompts]
         question_list = column.selectbox("Select existing prompt", SortedSet(prompts))
         load_prompt = column.button("Load prompt")
@@ -56,10 +54,10 @@ class UserInterface:
             question = column.text_area("Ask a question for the chatbot")
         save_button = column.button("Save prompt")
         if save_button:
-            self.collection_manager.save_prompt(question)
+            collection_manager.save_prompt(question)
         return question
 
-    def render_new(self, data_access: DataAccess, crawler: Crawler):
+    def render_new(self, crawler: Crawler):
         col1, col2 = st.columns(2)
         # if col1.checkbox("Preview Mode?", value=False):
         #     build_reflection_menu(data_access, col1)
@@ -100,25 +98,42 @@ class UserInterface:
                 ),
             ]
         )
-
         # Defaults:
-        collection_name = "sitemapls"
+        collection_name = "sitemapls2"
         chunk_size = "300"
         chunk_overlap = "150"
         embedding_model = "all-MiniLM-L12-v2"
 
+        config_loader = ConfigLoader()
+        embedding_factory = EmbeddingFactory(config_loader)
+        llm_factory = LLMFactory(config_loader)
+
+        embedding_type = "azure" # TODO: Make default load from config to ensure it's valid for their settings
+        llm_type = "azure" # TODO: Make default load from config to ensure it's valid for their settings
         # Configurations UI section (for config overrides)
         if col1.checkbox("Show configs", value=False):
             # (Update values based on user input)
             collection_name = col1.text_input("Name of KB collection name", collection_name)
             chunk_size = col1.text_input("Chunk size", chunk_size)
             chunk_overlap = col1.text_input("Chunk overlap", chunk_overlap)
-            embedding_model = col1.text_input("Huggingface embedding model to use", embedding_model)
+            embedding_type = st.selectbox("embedding", config_loader.get_embedding_names())
+            llm_type = st.selectbox("LLM provider", config_loader.get_llm_names())
+        # get LLMs listed
 
-        chatbot = Chatbot(embedding_model, collection_name)
+        # Must have LLM and Embedding constructed to proceed here.
+
+        embedding_model = embedding_factory.create_embedding(embedding_type)
+        llm_model = llm_factory.create_llm_model(llm_type)
+
+        chatbot = Chatbot(config_loader, collection_name, embedding_model, llm_model)
+
+        vector_store_factory = VectorStoreFactory(embedding_model, config_loader)
+        vector_store = vector_store_factory.create_vector_store(
+            "AstraDB", collection_name=collection_name
+        )
 
         if col1.checkbox("Enable web crawler?", value=False):
-            setup_sitemap_crawler_ui(col2, crawler, collection_name, int(chunk_size), int(chunk_overlap))
+            setup_sitemap_crawler_ui(col2, crawler, collection_name, int(chunk_size), int(chunk_overlap), vector_store)
         user_chat_area = col1.text_area("Enter message here")
         question_count = col1.text_input("Number of questions to ask for each table", "3")
 
@@ -329,7 +344,7 @@ def build_reflection_menu(data_access, col1):
     # component_type = col1.selectbox("Component Type", ("Construction", "Inference"))
 
 
-def setup_sitemap_crawler_ui(column, crawler: Crawler, collection_name: str, chunk_size: int, chunk_overlap: int):
+def setup_sitemap_crawler_ui(column, crawler: Crawler, collection_name: str, chunk_size: int, chunk_overlap: int, vector_store: AstraDB):
     sitemaps = column.text_input(
         "Sitemap URLs to crawl as csv"
     )  # To do: Handle this input better
@@ -338,13 +353,6 @@ def setup_sitemap_crawler_ui(column, crawler: Crawler, collection_name: str, chu
         start = time.time()
         # Check if empty
         sitemap_list = get_sitemap_list_from_csv(sitemaps)
-        embedding_manager = EmbeddingManager()
-        config_loader = ConfigLoader()
-        # I could update the ConfigLoader to first load from a YAML config file.
-        vector_store_factory = VectorStoreFactory(embedding_manager, config_loader)
-        vector_store = vector_store_factory.create_vector_store(
-            "AstraDB", collection_name=collection_name
-        )
         splitter_factory = SplitterFactory(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
         splitter = splitter_factory.create_splitter()
         crawler.async_crawl_and_ingest_list(

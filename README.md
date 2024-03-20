@@ -137,17 +137,74 @@ You can set those here:
 
 Finally, apply the changes and click OK.
 
+## Define the config.yaml stuff
+Create config directory
+Create config.yaml file in that directory.
+Here's an example of what your config.yaml file needs to look like. Only include the sections that are relevant.
+For example, if you're using Azure, you will want to specify (at a minimum):
 
-## Upcoming API changes
-- Refactoring builder/factory classes to actually use builder or factory method patterns
-- Build abstraction over prompt creation to reduce duplication
-- Remove old/unused code
-- Refactor dependency injection
-- Rewrite graph to build LCEL chains/prompts and deprecate reflection API
-- Rewrite tests to use proper mocks,stubs, and fakes 
-- Parallelize chains to improve performance
-- Consolidate configs
+```yaml
+astradb:
+  ASTRA_TOKEN: "AstraCS:"
+  ASTRA_ENDPOINT: "https://....apps.astra.datastax.com"
+  SECURE_BUNDLE_PATH: "/absolute/path/to/secure-connect.zip"
+llm:
+  azure:
+    required:
+      AZURE_OPENAI_API_KEY: "mykey"
+      AZURE_OPENAI_ENDPOINT: "https://example.openai.azure.com/"
+      OPENAI_API_VERSION: "2023-05-15"
+      AZURE_DEPLOYMENT: "example-gpt-4"
+    optional:
+      AZURE_MODEL_VERSION: "your_azure_model_version"
+embedding:
+  azure:
+    required:
+      AZURE_DEPLOYMENT: "example-embeddings"
+      OPENAI_API_VERSION: "2023-05-15"
+```
+Any additional configs provided will allow you to swap your LLM and embeddings in the UI.
+Here is a more complete example that supports more LLMs and embeddings:
 
+```yaml
+astradb:
+  ASTRA_TOKEN: "AstraCS:"
+  ASTRA_ENDPOINT: "https://....apps.astra.datastax.com"
+  SECURE_BUNDLE_PATH: "/absolute/path/to/secure-connect.zip"
+llm:
+  watsonx:
+    required:
+      IBM_API_SECRET: "mysecret"
+      IBM_PROJECT_ID: "my-id"
+  openai:
+    required:
+      OPENAI_API_KEY: "mysecret"
+      MODEL_NAME: "gpt-4-1106-preview"
+  azure:
+    required:
+      AZURE_OPENAI_API_KEY: "mykey"
+      AZURE_OPENAI_ENDPOINT: "https://example.openai.azure.com/"
+      OPENAI_API_VERSION: "2023-05-15"
+      AZURE_DEPLOYMENT: "example-gpt-4"
+    optional:
+      AZURE_MODEL_VERSION: "your_azure_model_version"
+
+langsmith:
+  required:
+    LANGCHAIN_API_KEY: "mykey"
+    LANGCHAIN_ENDPOINT: "https://api.smith.langchain.com"
+    LANGCHAIN_PROJECT: "myproject"
+    LANGCHAIN_TRACING_V2: "true"
+
+embedding:
+  sentence_transformer:
+    required:
+      MODEL_NAME: "all-MiniLM-L12-v2"
+  azure:
+    required:
+      AZURE_DEPLOYMENT: "example-embeddings"
+      OPENAI_API_VERSION: "2023-05-15"
+```
 
 ## Research influences:
 From the work of Dong, X. et al. (2023), the most common source of errors was incorrect selection of table or column names. 

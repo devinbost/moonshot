@@ -16,4 +16,5 @@ sentence_transformers==2.5.1
 sortedcontainers==2.4.0
 streamlit==1.32.1
 openai==1.13.3
-#langchain-astradb
+langchain-openai==0.0.8
+numpy==1.26.4

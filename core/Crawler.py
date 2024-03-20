@@ -18,14 +18,13 @@ from pydantic_models.PageContent import PageContent
 
 
 class Crawler:
-    def __init__(self, data_access: DataAccess):
+    def __init__(self):
         """
         Initialize the Crawler with a DataAccess object.
         Parameters:
             data_access (DataAccess): The data access object to interact with the database.
         """
         self.ui_update_in_progress = False
-        self.data_access = data_access
         self.urls = None
         self.counter = 0
         self.counter_lock = asyncio.Lock()
