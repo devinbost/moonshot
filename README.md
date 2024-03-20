@@ -85,6 +85,7 @@ Ensure that Vector is selected, and fill out the form with your desired name, pr
 ![create_vector_db_form.png](img/create_vector_db_form.png)
 
 Then, click Create Database. That's it! You now have an Astra DB with vector enabled!
+It takes just a moment to provision, and once it starts, you can click on it and explore the UI.
 
 ### Run starter script
 
