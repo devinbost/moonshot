@@ -150,7 +150,7 @@ class Chatbot:
                 self.data_access
             )  # Assuming self.data_access is already instantiated in __init__
 
-            self.log_response("Start", "Inspecting hundreds of tables in the database")
+            self.log_response("Start", "Inspecting all tables in the database")
 
             relevant_tables = await self.chain_factory.get_relevant_tables(
                 data_access, self.model, user_info
