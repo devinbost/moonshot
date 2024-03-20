@@ -71,14 +71,30 @@ pip install -r requirements.txt
 ```
 
 ### Setup Astra DB
-Follow the steps to setup your Astra DB and table. There are some guided instructions you can follow if you scroll down to the "Setup Astra" section of this Colab notebook:
-https://colab.research.google.com/drive/1ABgDi6h0mHfkbTizTedRGioUMmiBh3RL#scrollTo=0zzbA6QTHxvo
 
-A CQL script has been provided (scripts/setup_tables.cql) with some starter data that you can run in AstraDB
+#### Create AstraDB account
+Setup your free AstraDB account if you haven't already done so.
+https://astra.datastax.com/signup
+
+#### Create a new vector database
+After creating your Astra account, click the button to create a new database.
+![create_vector_db.png](img/create_vector_db.png)
+
+Ensure that Vector is selected, and fill out the form with your desired name, provider and region.
+
+![create_vector_db_form.png](img/create_vector_db_form.png)
+
+Then, click Create Database. That's it! You now have an Astra DB with vector enabled!
+
+### Run starter script
+
+A CQL script has been provided (`scripts/setup_tables.cql`) with some starter data that you can run in AstraDB.
+
 To run this script, open your Astra portal, navigate to your database, and click the CQL Console button:
 ![cql_console.png](img/cql_console.png)
-In the example script, we assume your namespace is named "telecom". To create it, navigate to the Create Namespace box:
-![create_namespace.png](img/create_namespace.png).
+In the example script, we assume your namespace is named "default_namespace". 
+
+Copy and paste the contents into the CQL prompt. 
 
 ## Configuring PyCharm:
 Add interpreter:
