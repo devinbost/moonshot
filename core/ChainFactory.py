@@ -52,7 +52,7 @@ class ChainFactory:
         table_summarization_chain: Runnable = (
             {"Information": select_with_where_chain}
             | PromptFactory.build_summarization_prompt()
-            | self.llm_factory.create_llm_model("openai")
+            | model
             | StrOutputParser()
         )
         return table_summarization_chain
