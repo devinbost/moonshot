@@ -97,9 +97,17 @@ Set your env and bin path to point to the new environment.
 Also, be sure to set `run core/main.py` and set your working directory to where your repo is running from.
 ![set_runtime_config_path.png](img/set_runtime_config_path.png)
 
-Set your environment variables.
-Some of these environment variables are used by `core/VectorStoreFactory.py` to setup the drivers for the different experiences we will use in this workshop.
-Other environment variables are loaded by `core/ConfigLoader.py` and used by `core/LLMFactory.py` to setup your LLM(s).
+Make sure that the content and source roots are added to PYTHONPATH so you don't run into import problems.
+You can set those here:
+![python_path.png](img/python_path.png)
+
+You can ignore the Environment variables section because all configs are now stored in config/config.yaml
+
+Apply the changes and click OK.
+
+### Setup your configs
+Some configs are used by `core/VectorStoreFactory.py` to setup the drivers for the different experiences we will use in this workshop.
+Other configs are loaded by `core/ConfigLoader.py` and used by `core/LLMFactory.py` to setup your LLM(s).
 At a minimum, you will need:
 - `ASTRA_TOKEN`
 - `ASTRA_ENDPOINT`
@@ -129,18 +137,14 @@ Optionally, if you want integration with LangSmith, you will want to add these v
 - `LANGCHAIN_ENDPOINT`
 - `LANGCHAIN_PROJECT`
 - `LANGCHAIN_TRACING_V2` (set to "true")
-These LangSmith variable values can be obtained as per LangChain documentation. 
+These LangSmith variable values can be obtained as per LangChain documentation.
 
-Also, make sure that the content and source roots are added to PYTHONPATH so you don't run into import problems.
-You can set those here:
-![python_path.png](img/python_path.png)
+#### Put the values into config.yaml
+Create a directory named `config` and create config.yaml file in that directory.
 
-Finally, apply the changes and click OK.
+![config_directory.png](img/config_directory.png)
 
-## Define the config.yaml stuff
-Create config directory
-Create config.yaml file in that directory.
-Here's an example of what your config.yaml file needs to look like. Only include the sections that are relevant.
+Below is an example of what your config.yaml file needs to look like. Only include the sections that are relevant.
 For example, if you're using Azure, you will want to specify (at a minimum):
 
 ```yaml
