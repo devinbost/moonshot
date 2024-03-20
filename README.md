@@ -97,31 +97,6 @@ In the example script, we assume your namespace is named "default_namespace".
 
 Copy and paste the contents into the CQL prompt. 
 
-## Configuring PyCharm:
-Add interpreter:
-![interpreter.png](img/interpreter.png)
-
-Select the new conda environment and click OK:
-![setup_interpreter.png](img/setup_interpreter.png)
-
-Create a new runtime configuration for running Streamlit:
-![create_runtime_config.png](img/create_runtime_config.png)
-
-Click + sign to add new Python configuration:
-![add_python_runtime_config.png](img/add_python_runtime_config.png)
-
-Set your env and bin path to point to the new environment.
-Also, be sure to set `run core/main.py` and set your working directory to where your repo is running from.
-![set_runtime_config_path.png](img/set_runtime_config_path.png)
-
-Make sure that the content and source roots are added to PYTHONPATH so you don't run into import problems.
-You can set those here:
-![python_path.png](img/python_path.png)
-
-You can ignore the Environment variables section because all configs are now stored in config/config.yaml
-
-Apply the changes and click OK.
-
 ### Setup your configs
 Some configs are used by `core/VectorStoreFactory.py` to setup the drivers for the different experiences we will use in this workshop.
 Other configs are loaded by `core/ConfigLoader.py` and used by `core/LLMFactory.py` to setup your LLM(s).
@@ -225,6 +200,32 @@ embedding:
     required:
       MODEL_NAME: "all-MiniLM-L12-v2"
 ```
+
+
+### Configuring PyCharm (optional but recommended):
+Add interpreter:
+![interpreter.png](img/interpreter.png)
+
+Select the new conda environment and click OK:
+![setup_interpreter.png](img/setup_interpreter.png)
+
+Create a new runtime configuration for running Streamlit:
+![create_runtime_config.png](img/create_runtime_config.png)
+
+Click + sign to add new Python configuration:
+![add_python_runtime_config.png](img/add_python_runtime_config.png)
+
+Set your env and bin path to point to the new environment.
+Also, be sure to set `run core/main.py` and set your working directory to where your repo is running from.
+![set_runtime_config_path.png](img/set_runtime_config_path.png)
+
+Make sure that the content and source roots are added to PYTHONPATH so you don't run into import problems.
+You can set those here:
+![python_path.png](img/python_path.png)
+
+You can ignore the Environment variables section because all configs are now stored in config/config.yaml
+
+Apply the changes and click OK.
 
 ## Research influences:
 From the work of Dong, X. et al. (2023), the most common source of errors was incorrect selection of table or column names. 
