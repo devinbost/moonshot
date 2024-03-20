@@ -97,9 +97,17 @@ Set your env and bin path to point to the new environment.
 Also, be sure to set `run core/main.py` and set your working directory to where your repo is running from.
 ![set_runtime_config_path.png](img/set_runtime_config_path.png)
 
-Set your environment variables.
-Some of these environment variables are used by `core/VectorStoreFactory.py` to setup the drivers for the different experiences we will use in this workshop.
-Other environment variables are loaded by `core/ConfigLoader.py` and used by `core/LLMFactory.py` to setup your LLM(s).
+Make sure that the content and source roots are added to PYTHONPATH so you don't run into import problems.
+You can set those here:
+![python_path.png](img/python_path.png)
+
+You can ignore the Environment variables section because all configs are now stored in config/config.yaml
+
+Apply the changes and click OK.
+
+### Setup your configs
+Some configs are used by `core/VectorStoreFactory.py` to setup the drivers for the different experiences we will use in this workshop.
+Other configs are loaded by `core/ConfigLoader.py` and used by `core/LLMFactory.py` to setup your LLM(s).
 At a minimum, you will need:
 - `ASTRA_TOKEN`
 - `ASTRA_ENDPOINT`
@@ -129,25 +137,78 @@ Optionally, if you want integration with LangSmith, you will want to add these v
 - `LANGCHAIN_ENDPOINT`
 - `LANGCHAIN_PROJECT`
 - `LANGCHAIN_TRACING_V2` (set to "true")
-These LangSmith variable values can be obtained as per LangChain documentation. 
+These LangSmith variable values can be obtained as per LangChain documentation.
 
-Also, make sure that the content and source roots are added to PYTHONPATH so you don't run into import problems.
-You can set those here:
-![python_path.png](img/python_path.png)
+#### Put the values into config.yaml
+Create a directory named `config` and create config.yaml file in that directory.
 
-Finally, apply the changes and click OK.
+![config_directory.png](img/config_directory.png)
 
+Below is an example of what your config.yaml file needs to look like. Only include the sections that are relevant.
+For example, if you're using Azure, you will want to specify (at a minimum):
 
-## Upcoming API changes
-- Refactoring builder/factory classes to actually use builder or factory method patterns
-- Build abstraction over prompt creation to reduce duplication
-- Remove old/unused code
-- Refactor dependency injection
-- Rewrite graph to build LCEL chains/prompts and deprecate reflection API
-- Rewrite tests to use proper mocks,stubs, and fakes 
-- Parallelize chains to improve performance
-- Consolidate configs
+```yaml
+astradb:
+  ASTRA_TOKEN: "AstraCS:"
+  ASTRA_ENDPOINT: "https://....apps.astra.datastax.com"
+  SECURE_BUNDLE_PATH: "/absolute/path/to/secure-connect.zip"
+llm:
+  azure:
+    required:
+      AZURE_OPENAI_API_KEY: "mykey"
+      AZURE_OPENAI_ENDPOINT: "https://example.openai.azure.com/"
+      OPENAI_API_VERSION: "2023-05-15"
+      AZURE_DEPLOYMENT: "example-gpt-4"
+    optional:
+      AZURE_MODEL_VERSION: "your_azure_model_version"
+embedding:
+  azure:
+    required:
+      AZURE_DEPLOYMENT: "example-embeddings"
+      OPENAI_API_VERSION: "2023-05-15"
+```
+Any additional configs provided will allow you to swap your LLM and embeddings in the UI.
+Here is a more complete example that supports more LLMs and embeddings:
 
+```yaml
+astradb:
+  ASTRA_TOKEN: "AstraCS:"
+  ASTRA_ENDPOINT: "https://....apps.astra.datastax.com"
+  SECURE_BUNDLE_PATH: "/absolute/path/to/secure-connect.zip"
+llm:
+  watsonx:
+    required:
+      IBM_API_SECRET: "mysecret"
+      IBM_PROJECT_ID: "my-id"
+  openai:
+    required:
+      OPENAI_API_KEY: "mysecret"
+      MODEL_NAME: "gpt-4-1106-preview"
+  azure:
+    required:
+      AZURE_OPENAI_API_KEY: "mykey"
+      AZURE_OPENAI_ENDPOINT: "https://example.openai.azure.com/"
+      OPENAI_API_VERSION: "2023-05-15"
+      AZURE_DEPLOYMENT: "example-gpt-4"
+    optional:
+      AZURE_MODEL_VERSION: "your_azure_model_version"
+
+langsmith:
+  required:
+    LANGCHAIN_API_KEY: "mykey"
+    LANGCHAIN_ENDPOINT: "https://api.smith.langchain.com"
+    LANGCHAIN_PROJECT: "myproject"
+    LANGCHAIN_TRACING_V2: "true"
+
+embedding:
+  sentence_transformer:
+    required:
+      MODEL_NAME: "all-MiniLM-L12-v2"
+  azure:
+    required:
+      AZURE_DEPLOYMENT: "example-embeddings"
+      OPENAI_API_VERSION: "2023-05-15"
+```
 
 ## Research influences:
 From the work of Dong, X. et al. (2023), the most common source of errors was incorrect selection of table or column names. 

@@ -9,14 +9,15 @@ from langchain.vectorstores import Cassandra
 from langchain.vectorstores import AstraDB
 
 from core.ConfigLoader import ConfigLoader
-from core.EmbeddingManager import EmbeddingManager
+from core.EmbeddingFactory import EmbeddingFactory
+from core.adapters.EmbeddingInterface import EmbeddingInterface
 
 
 class VectorStoreFactory:
     def __init__(
-        self, embedding_manager: EmbeddingManager, config_loader: ConfigLoader
+        self, embedding: EmbeddingInterface, config_loader: ConfigLoader
     ):
-        self.embedding_manager = embedding_manager
+        self.embedding = embedding
         self.config_loader = config_loader
 
     def create_vector_store(self, store_type, **kwargs):
@@ -31,26 +32,26 @@ class VectorStoreFactory:
         if store_type == "AstraDB":  # Data API interface for LangChain
             # Future version should use this instead: https://github.com/langchain-ai/langchain-datastax/tree/main/libs/astradb
             return AstraDB(
-                embedding=self.embedding_manager.get_embedding(),
+                embedding=self.embedding.get_model(),
                 collection_name=kwargs.get("collection_name"),
-                token=self.config_loader.get("token"),
-                api_endpoint=self.config_loader.get("api_endpoint"),
+                token=self.config_loader.get("astradb.ASTRA_TOKEN"),
+                api_endpoint=self.config_loader.get("astradb.ASTRA_ENDPOINT"),
             )
         elif store_type == "AstraPyDB":  # Data API interface for direct access
             return AsyncAstraPyDB(
-                token=self.config_loader.get("token"),
-                api_endpoint=self.config_loader.get("api_endpoint"),
+                token=self.config_loader.get("astradb.ASTRA_TOKEN"),
+                api_endpoint=self.config_loader.get("astradb.ASTRA_ENDPOINT"),
             )
         elif store_type == "Cluster":  # Native API interface for CQL
             return Cluster(
                 cloud={
                     "secure_connect_bundle": self.config_loader.get(
-                        "secure_bundle_path"
+                        "astradb.SECURE_BUNDLE_PATH"
                     ),
                 },
                 auth_provider=PlainTextAuthProvider(
                     "token",
-                    self.config_loader.get("token"),
+                    self.config_loader.get("astradb.ASTRA_TOKEN"),
                 ),
             )
         else:

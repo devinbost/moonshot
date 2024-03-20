@@ -12,18 +12,19 @@ from langchain.chat_models import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 
 from core.CollectionManager import CollectionManager
-from core.EmbeddingManager import EmbeddingManager
 
 from core.ConfigLoader import ConfigLoader
+from core.EmbeddingFactory import EmbeddingFactory
 from core.LLMFactory import LLMFactory
 from core.VectorStoreFactory import VectorStoreFactory
+from core.adapters.EmbeddingInterface import EmbeddingInterface
 from pydantic_models.QAPair import QAPair
 from pydantic_models.UserInfo import UserInfo
 
 
 class Chatbot:
-    # Need to refactor this class at some point to support multiple LLM providers
-    def __init__(self, embedding_model: str, collection_name: str):
+    def __init__(self, config_loader: ConfigLoader, collection_name: str, embedding: EmbeddingInterface,
+                 model: ChatOpenAI):
         """
         Initialize the Chatbot with a data access object.
         Parameters:
@@ -35,18 +36,14 @@ class Chatbot:
         print("ran __init__ on Chatbot")
         self.relevant_table_cache = None
 
-        config_loader = ConfigLoader()
         self.llm_factory = LLMFactory(config_loader)
         self.chain_factory = ChainFactory(self.llm_factory)
-        self.embedding_manager = EmbeddingManager(model_name=embedding_model) # TODO: pull this up so people can change it
-        self.vectorstore_factory = VectorStoreFactory(self.embedding_manager, config_loader)
+        self.embedding_factory = EmbeddingFactory(config_loader)
+        self.vectorstore_factory = VectorStoreFactory(embedding, config_loader)
         self.astrapydb = self.vectorstore_factory.create_vector_store("AstraPyDB")
-        self.collection_manager = CollectionManager(self.astrapydb, self.embedding_manager, collection_name)
-        self.data_access = DataAccess(config_loader, self.embedding_manager, self.vectorstore_factory)
-
-        # TODO: inject these into the constructor instead.
-        self.model = self.llm_factory.create_llm_model("openai", model_name="gpt-4-1106-preview")
-        self.model35 = self.llm_factory.create_llm_model("openai", model_name="gpt-3.5-turbo-1106")
+        self.collection_manager = CollectionManager(self.astrapydb, embedding, collection_name)
+        self.data_access = DataAccess(config_loader, self.vectorstore_factory)
+        self.model = model
 
     def log_response(
         self,
@@ -153,7 +150,7 @@ class Chatbot:
                 self.data_access
             )  # Assuming self.data_access is already instantiated in __init__
 
-            self.log_response("Start", "Inspecting hundreds of tables in the database")
+            self.log_response("Start", "Inspecting all tables in the database")
 
             relevant_tables = await self.chain_factory.get_relevant_tables(
                 data_access, self.model, user_info
@@ -167,7 +164,6 @@ class Chatbot:
                 all_generated_questions,
                 self.collection_manager,
                 self.model,
-                self.model35,
                 table,
                 user_info,
                 summarization_limit,
@@ -194,7 +190,6 @@ class Chatbot:
         all_generated_questions,
         collection_manager: CollectionManager,
         model,
-        model35,
         table,
         user_info: UserInfo,
         summarization_limit: int,
@@ -208,7 +203,7 @@ class Chatbot:
         generated_questions = await self.generate_questions_async(model, table_summarization, user_message,
                                                                   question_count)
         for question in generated_questions:
-            all_generated_questions.append(question) # Perhaps we should instead append generated_questions directly instead of this loop.
+            all_generated_questions.append(question)
 
         answers_to_generated_questions = await self.answer_generated_questions_async(
             generated_questions,
@@ -219,9 +214,6 @@ class Chatbot:
         answer_pairs_as_strings = [answerpair.model_dump() for answerpair in answers_to_generated_questions]
         self.log_response("Questions and answers", answer_pairs_as_strings)
 
-        # insights_on_table = await self.summarize_findings_async(
-        #     factory, model, topic_summaries_for_table
-        # )
         return answers_to_generated_questions
 
     async def answer_generated_questions_async(
@@ -251,36 +243,6 @@ class Chatbot:
         )
         return chain
 
-    def get_real_keys(self, all_collection_keywords, deduped_segment_keywords):
-        real_deduped_keys = {}
-        for key in deduped_segment_keywords.keys():
-            for value in deduped_segment_keywords[key]:
-                if value in all_collection_keywords[key]:
-                    if key in real_deduped_keys:
-                        real_deduped_keys[key].append(value)
-                    else:
-                        real_deduped_keys[key] = [value]
-        return real_deduped_keys
-
-    def reduce_segments(self, reduced_keyword_list):
-        reduced_segment_keywords = {}
-        for key, result in reduced_keyword_list:
-            if key in reduced_segment_keywords:
-                reduced_segment_keywords[key].extend(result)
-            else:
-                reduced_segment_keywords[key] = result
-        return reduced_segment_keywords
-
-    def build_keyword_slices(self, all_collection_keywords):
-        keyword_list_slices: List[Tuple[str, List[str]]] = []
-        for collection_group in all_collection_keywords.keys():
-            list_for_seg: List[str] = all_collection_keywords[collection_group]
-            list_slices: List[Tuple[str, List[str]]] = self.slice_into_chunks(
-                collection_group, list_for_seg, 20
-            )  # Sliced into 20 sublists
-            keyword_list_slices.extend(list_slices)
-        return keyword_list_slices
-
     async def summarize_table_async(self, model, table, user_info):
         table_summarization_chain = self.chain_factory.build_summarization_chain(
             model, self.data_access, table
@@ -307,67 +269,6 @@ class Chatbot:
             f"Here are some questions we think might be relevant for the user:\n\n {questions}",
         )
         return questions
-
-    async def reduce_keywords_async(
-        self, model35, factory, table_summarization, keyword_list_slices
-    ):
-        keyword_reduction_chains = [
-            (
-                slice_[0],
-                factory.build_keyword_reduction_prompt_chain(
-                    model35, table_summarization, slice_[1]
-                ),
-            )
-            for slice_ in keyword_list_slices
-        ]
-        reduced_keyword_list = await asyncio.gather(
-            *[
-                self._invoke_chain_async(keyed_chain)
-                for keyed_chain in keyword_reduction_chains
-            ]
-        )
-        return reduced_keyword_list
-
-    async def _invoke_chain_async(self, chain):
-        key, chain = chain
-        result = await chain.ainvoke({})
-        return key, result
-
-    def deduplicate_keywords(self, reduced_keyword_list):
-        deduped_segment_keywords = {}
-        for key, result in reduced_keyword_list:
-            deduped_segment_keywords.setdefault(key, []).extend(result)
-        return {
-            key: list(set(value)) for key, value in deduped_segment_keywords.items()
-        }
-
-    def get_real_keys(self, all_collection_keywords, deduped_segment_keywords):
-        real_deduped_keys = {}
-        for key, values in deduped_segment_keywords.items():
-            real_deduped_keys[key] = [
-                value for value in values if value in all_collection_keywords[key]
-            ]
-        return real_deduped_keys
-
-    async def summarize_findings_async(self, factory, model, topic_summaries_for_table):
-        topic_summaries_for_table_as_string = json.dumps(topic_summaries_for_table)
-        summarization_of_findings_for_table = (
-            factory.build_vector_search_summarization_chain(
-                model, topic_summaries_for_table_as_string
-            )
-        )
-        return await summarization_of_findings_for_table.ainvoke({})
-
-    async def summarize_answers(self, factory, model, qa_pairs: List[QAPair]):
-        answers = [qa_pair.answer for qa_pair in qa_pairs]
-        json_list_of_answers = json.dumps(answers)
-        summarization_of_findings_for_table = (
-            factory.build_vector_search_summarization_chain(
-                model, json_list_of_answers
-            )
-        )
-        return await summarization_of_findings_for_table.ainvoke({})
-
     async def generate_recommendation_async(
         self, model, all_user_table_summaries, all_table_insights, user_message
     ):

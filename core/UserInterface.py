@@ -1,8 +1,12 @@
 import asyncio
+import json
 
 import streamlit as st
 from datetime import datetime
 import time
+
+from astrapy.api import APIRequestError
+
 from Crawler import Crawler
 from SitemapCrawler import SitemapCrawler
 from graphviz import Digraph
@@ -16,15 +20,18 @@ from ClassInspector import (
 )
 from core.CollectionManager import CollectionManager
 from core.ConfigLoader import ConfigLoader
-from core.EmbeddingManager import EmbeddingManager
+
+from core.EmbeddingFactory import EmbeddingFactory
+from core.LLMFactory import LLMFactory
 from core.SplitterFactory import SplitterFactory
 from core.VectorStoreFactory import VectorStoreFactory
+from core.adapters.EmbeddingInterface import EmbeddingInterface
 from pydantic_models.ComponentData import ComponentData
 from DataAccess import DataAccess
 from pydantic_models.PropertyInfo import PropertyInfo
 from pydantic_models.TableDescription import TableDescription
 from pydantic_models.UserInfo import UserInfo
-
+from langchain.vectorstores import AstraDB
 
 class UserInterface:
     def __init__(
@@ -36,15 +43,10 @@ class UserInterface:
         self.app_name = "Chatbot demo"
         self.crawler = crawler
         self.sitemap_crawler = sitemap_crawler
-        embedding_manager = EmbeddingManager()
-        config_loader = ConfigLoader()
-        self.vector_store_factory = VectorStoreFactory(embedding_manager, config_loader)
-        self.astrapy_db = self.vector_store_factory.create_vector_store("AstraPyDB")
-        self.collection_manager = CollectionManager(self.astrapy_db, embedding_manager, "sitemapls")
 
-    def setup_prompt_ui_components(self, column):
+    def setup_prompt_ui_components(self, column, collection_manager: CollectionManager):
         prompt_search = column.text_input("Find prompt")
-        matching_prompts = self.collection_manager.get_matching_prompts(prompt_search)
+        matching_prompts = collection_manager.get_matching_prompts(prompt_search)
         prompts = [s["prompt"] for s in matching_prompts]
         question_list = column.selectbox("Select existing prompt", SortedSet(prompts))
         load_prompt = column.button("Load prompt")
@@ -56,10 +58,26 @@ class UserInterface:
             question = column.text_area("Ask a question for the chatbot")
         save_button = column.button("Save prompt")
         if save_button:
-            self.collection_manager.save_prompt(question)
+            collection_manager.save_prompt(question)
         return question
 
-    def render_new(self, data_access: DataAccess, crawler: Crawler):
+    def initialize_state(self):
+        # Set defaults from config or preset values
+        st.session_state.configs_shown = True
+        st.session_state.collection_name = "sitemapls"
+        st.session_state.chunk_size = "300"
+        st.session_state.chunk_overlap = "150"
+        st.session_state.embedding_type = "azure"  # Example default, adjust based on actual config
+        st.session_state.llm_type = "azure" # Example default, adjust based on actual config
+        # Load additional defaults as necessary
+    def user_configuration(self, config_loader):
+        # Update values based on user input
+        st.session_state.collection_name = st.sidebar.text_input("Name of KB collection name", st.session_state.collection_name)
+        st.session_state.chunk_size = st.sidebar.text_input("Chunk size", st.session_state.chunk_size)
+        st.session_state.chunk_overlap = st.sidebar.text_input("Chunk overlap", st.session_state.chunk_overlap)
+        st.session_state.embedding_type = st.sidebar.selectbox("embedding", config_loader.get_embedding_names())  # Example options
+        st.session_state.llm_type = st.sidebar.selectbox("LLM provider", config_loader.get_llm_names())  # Example options
+    def render_new(self, crawler: Crawler):
         col1, col2 = st.columns(2)
         # if col1.checkbox("Preview Mode?", value=False):
         #     build_reflection_menu(data_access, col1)
@@ -101,31 +119,75 @@ class UserInterface:
             ]
         )
 
-        # Defaults:
-        collection_name = "sitemapls"
-        chunk_size = "300"
-        chunk_overlap = "150"
-        embedding_model = "all-MiniLM-L12-v2"
+        config_loader = ConfigLoader()
+        embedding_factory = EmbeddingFactory(config_loader)
+        llm_factory = LLMFactory(config_loader)
 
-        # Configurations UI section (for config overrides)
-        if col1.checkbox("Show configs", value=False):
-            # (Update values based on user input)
-            collection_name = col1.text_input("Name of KB collection name", collection_name)
-            chunk_size = col1.text_input("Chunk size", chunk_size)
-            chunk_overlap = col1.text_input("Chunk overlap", chunk_overlap)
-            embedding_model = col1.text_input("Huggingface embedding model to use", embedding_model)
+        # Initialize or get existing state
+        if 'configs_shown' not in st.session_state:
+            self.initialize_state()
 
-        chatbot = Chatbot(embedding_model, collection_name)
+        # Configuration UI
+        configs = st.sidebar.checkbox("Show configs", value=st.session_state.configs_shown)
+        st.session_state.configs_shown = configs
 
-        if col1.checkbox("Enable web crawler?", value=False):
-            setup_sitemap_crawler_ui(col2, crawler, collection_name, int(chunk_size), int(chunk_overlap))
+        if configs:
+            self.user_configuration(config_loader)
+
+        if st.sidebar.button("Initialize collection with this embedding"):
+            chatbot, vector_store = self.initialize_collection(embedding_factory, llm_factory, config_loader) # This call is to ensure it's successful
+            st.session_state.collection_initialized = True
+        elif "collection_initialized" not in st.session_state:
+            # This key will not exist until the button is pressed for the first time,
+            # indicating that the collection has not been initialized yet.
+            st.session_state.collection_initialized = False
+
+        if st.session_state.collection_initialized:
+            # Proceed with the search operation
+            chatbot, vector_store = self.initialize_collection(embedding_factory, llm_factory, config_loader) # TODO: Refactor into state so this isn't duplicated
+            self.build_main_display(crawler, user_info, chatbot, vector_store)
+        else:
+            # Show a message indicating the collection needs to be initialized
+            st.text("You must initialize your collection first by clicking 'Initialize collection with this embedding'")
+    def initialize_collection(self, embedding_factory, llm_factory, config_loader):
+        try:
+            embedding_model = embedding_factory.create_embedding(st.session_state.embedding_type)
+            llm_model = llm_factory.create_llm_model(st.session_state.llm_type)
+            chatbot = Chatbot(config_loader, st.session_state.collection_name, embedding_model, llm_model)
+            vector_store_factory = VectorStoreFactory(embedding_model, config_loader)
+            vector_store = vector_store_factory.create_vector_store(
+                "AstraDB", collection_name=st.session_state.collection_name
+            )
+            return chatbot, vector_store
+        except APIRequestError as e:
+            error_message = str(e)
+            try:
+                # Attempt to parse the error message as JSON to check the specific error code
+                error_details = json.loads(error_message)
+                if any(err.get('errorCode') == 'INVALID_COLLECTION_NAME' for err in error_details.get('errors', [])):
+                    # Custom message for the INVALID_COLLECTION_NAME error
+                    custom_message = "Your collection has already been created with a different embedding. Please delete it, use a compatible embedding, or provide a new collection name."
+                    st.error(custom_message)
+                elif any(err.get('errorCode') == 'TOO_MANY_INDEXES' for err in error_details.get('errors', [])):
+                    # Handle the TOO_MANY_INDEXES error separately
+                    st.error("Too many collections. (Hitting quota limit on number of indexes.) Please delete one or increase quota and try again.")
+                else:
+                    # General error handling for other APIRequestError instances
+                    st.error(f"An API request error occurred: {error_message}")
+            except json.JSONDecodeError:
+                # Fallback if the error message cannot be parsed as JSON
+                st.error(f"An exception occurred, but the error details could not be parsed: {error_message}")
+        except Exception as e:
+            # Handle other unexpected exceptions
+            st.error(f"Failed to apply new configuration. Error was: {e}")
+    def build_main_display(self, crawler, user_info, chatbot, vector_store):
+        col1, col2 = st.columns(2)
+        if col1.checkbox("Enable web crawler?", value=False): # TODO: Refactor widgets into state so they're not recreated
+            setup_sitemap_crawler_ui(col2, crawler, st.session_state.collection_name, int(st.session_state.chunk_size), int(st.session_state.chunk_overlap), vector_store)
         user_chat_area = col1.text_area("Enter message here")
         question_count = col1.text_input("Number of questions to ask for each table", "3")
-
         searched = col1.button("Search")
-
         summarization_limit = 3  # We can make this a config param
-
         if len(user_chat_area) > 0 and searched:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -140,6 +202,7 @@ class UserInterface:
 
             # bot_response = chatbot.answer_customer(user_chat_area, user_info, col2)
             # bot_chat_area = col1.markdown(bot_response)
+
 
 def build_param_inputs(
     data_access, col1, param_dropdowns, param_inputs, param_names, prefix: str
@@ -329,7 +392,7 @@ def build_reflection_menu(data_access, col1):
     # component_type = col1.selectbox("Component Type", ("Construction", "Inference"))
 
 
-def setup_sitemap_crawler_ui(column, crawler: Crawler, collection_name: str, chunk_size: int, chunk_overlap: int):
+def setup_sitemap_crawler_ui(column, crawler: Crawler, collection_name: str, chunk_size: int, chunk_overlap: int, vector_store: AstraDB):
     sitemaps = column.text_input(
         "Sitemap URLs to crawl as csv"
     )  # To do: Handle this input better
@@ -338,13 +401,6 @@ def setup_sitemap_crawler_ui(column, crawler: Crawler, collection_name: str, chu
         start = time.time()
         # Check if empty
         sitemap_list = get_sitemap_list_from_csv(sitemaps)
-        embedding_manager = EmbeddingManager()
-        config_loader = ConfigLoader()
-        # I could update the ConfigLoader to first load from a YAML config file.
-        vector_store_factory = VectorStoreFactory(embedding_manager, config_loader)
-        vector_store = vector_store_factory.create_vector_store(
-            "AstraDB", collection_name=collection_name
-        )
         splitter_factory = SplitterFactory(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
         splitter = splitter_factory.create_splitter()
         crawler.async_crawl_and_ingest_list(

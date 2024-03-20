@@ -2,6 +2,7 @@
 data/
 scratch/
 logs/
+config/
 # Poetry local configuration file - https://python-poetry.org/docs/configuration/#local-configuration
 poetry.toml
 .DS_Store
