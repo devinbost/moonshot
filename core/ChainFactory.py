@@ -179,3 +179,34 @@ class ChainFactory:
                 | StrOutputParser()
         )
         return chain
+
+    def built_address_chain(self, model: ChatOpenAI) -> Runnable:
+        chain = (
+            {
+                "UserProvidedAddress": itemgetter("user_address"),
+                "VectorSearchProvidedAddresses": itemgetter("vector_search_addresses")
+            }
+            | PromptFactory.build_address_match_prompt()
+            | model
+            | StrOutputParser()
+            | RunnableLambda(PromptFactory.clean_string_v2)
+            | RunnableLambda(lambda x: json.loads(x))
+        )
+        return chain
+
+    # async def invoke_address_chain(
+    #     self, qa_chain, collection_manager: CollectionManager, question: str, vector_search_limit: int
+    # ) -> QAPair:
+    #     ...
+    #     return qa_pair
+
+    def build_knowledge_graph_chain(self, model: ChatOpenAI) -> Runnable:
+        chain = (
+            {"TextInput": itemgetter("text_input")}
+            | PromptFactory.build_knowledge_graph_tuples()
+            | model
+            | StrOutputParser()
+            | RunnableLambda(PromptFactory.clean_string_v2)
+            | RunnableLambda(lambda x: json.loads(x))
+        )
+        return chain

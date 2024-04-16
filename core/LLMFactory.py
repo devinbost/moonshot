@@ -26,6 +26,10 @@ class LLMFactory:
             api_key = self.config_loader.get("llm.openai.required.OPENAI_API_KEY")
             return ChatOpenAI(api_key=api_key, temperature=0, model_name=self.config_loader.get("llm.openai.required.MODEL_NAME"))
 
+        elif llm_type == "openai35":
+            api_key = self.config_loader.get("llm.openai.required.OPENAI_API_KEY")
+            return ChatOpenAI(api_key=api_key, temperature=0, model_name="gpt-3.5-turbo-0125")
+
         elif llm_type == "azure":
             key = self.config_loader.get("llm.azure.required.AZURE_OPENAI_API_KEY")
             return AzureChatOpenAI(api_key=key,

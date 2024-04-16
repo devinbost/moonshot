@@ -183,7 +183,10 @@ class UserInterface:
     def build_main_display(self, crawler, user_info, chatbot, vector_store):
         col1, col2 = st.columns(2)
         if col1.checkbox("Enable web crawler?", value=False): # TODO: Refactor widgets into state so they're not recreated
-            setup_sitemap_crawler_ui(col2, crawler, st.session_state.collection_name, int(st.session_state.chunk_size), int(st.session_state.chunk_overlap), vector_store)
+            setup_sitemap_crawler_ui(col2, crawler, st.session_state.collection_name,
+                                     int(st.session_state.chunk_size), int(st.session_state.chunk_overlap),
+                                     vector_store,
+                                     chatbot)
         user_chat_area = col1.text_area("Enter message here")
         question_count = col1.text_input("Number of questions to ask for each table", "3")
         searched = col1.button("Search")
@@ -392,7 +395,9 @@ def build_reflection_menu(data_access, col1):
     # component_type = col1.selectbox("Component Type", ("Construction", "Inference"))
 
 
-def setup_sitemap_crawler_ui(column, crawler: Crawler, collection_name: str, chunk_size: int, chunk_overlap: int, vector_store: AstraDB):
+def setup_sitemap_crawler_ui(column, crawler: Crawler, collection_name: str, chunk_size: int,
+                             chunk_overlap: int, vector_store: AstraDB,
+                             chatbot: Chatbot):
     sitemaps = column.text_input(
         "Sitemap URLs to crawl as csv"
     )  # To do: Handle this input better
@@ -404,7 +409,7 @@ def setup_sitemap_crawler_ui(column, crawler: Crawler, collection_name: str, chu
         splitter_factory = SplitterFactory(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
         splitter = splitter_factory.create_splitter()
         crawler.async_crawl_and_ingest_list(
-            sitemap_list, progress_bar, vector_store, splitter
+            sitemap_list, progress_bar, vector_store, splitter, chatbot
         )
         end = time.time()
         completion_time = end - start  # Time elapsed in seconds

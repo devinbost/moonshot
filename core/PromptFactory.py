@@ -501,3 +501,44 @@ Only give one answer for each question. Ensure that each object has exactly one 
 {Chunk}
 """
     return PromptTemplate.from_template(prompt)
+
+
+def build_address_match_prompt() -> PromptTemplate:
+    prompt = """You're a helpful assistant. I will give you a list of 5 addresses that I retrieved from my database (via vector search), as well as an address that I received from a user, and I want you to respond in one of two ways:
+
+if any of the addresses from the database appear to approximately match the address provided by the user, respond with the best matching address from the list.
+if none of the addresses appear to match, respond with {{"wasMatchFound": False, "best_address": "None"}}, as specified in the format below.
+
+USER PROVIDED ADDRESS:
+{UserProvidedAddress}
+
+VECTOR SEARCH ADDRESSES:
+{VectorSearchProvidedAddresses}
+
+FORMAT:
+Please format your response as JSON with the following format:
+
+{{"wasMatchFound": [true|false],
+"best_address": "example address if found"
+}}"""
+    return PromptTemplate.from_template(prompt)
+
+def build_knowledge_graph_tuples() -> PromptTemplate:
+    prompt = """You're a helpful assistant. From the given text example, generate a set of triples for constructing a knowledge graph based on what you found in the text. Return the result as a set like modified triples that include an entity description, like:
+
+(head entity, head entity description, relation, tail entity, tail entity description)
+
+Please ensure the descriptions are as detailed as might be appropriate to train a knowledge graph in production. 
+
+Return these sets in a JSON list of objects with the format:
+
+[
+{{"head": "example head entity", "head_description": "example head entity description", "relation": "example relation", "tail": "example tail entity", "tail_description": "example tail entity description"}},
+. . . 
+]
+
+Return only the output I've requested, and don't narrate what you're doing. 
+
+TEXT TO PARSE:
+{TextInput}"""
+    return PromptTemplate.from_template(prompt)

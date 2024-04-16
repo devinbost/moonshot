@@ -18,3 +18,4 @@ streamlit==1.32.1
 openai==1.13.3
 langchain-openai==0.0.8
 numpy==1.26.4
+fastparquet=2024.2.0

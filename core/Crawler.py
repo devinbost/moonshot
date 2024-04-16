@@ -1,4 +1,7 @@
 import asyncio
+import json
+from pathlib import Path
+
 from aiohttp import ClientSession
 from bs4 import BeautifulSoup
 import requests
@@ -13,7 +16,9 @@ import logging
 from datetime import datetime
 import os
 from typing import List
+import pandas as pd
 
+from core.Chatbot import Chatbot
 from pydantic_models.PageContent import PageContent
 
 
@@ -76,7 +81,8 @@ class Crawler:
         return urls
 
     async def extract_page_content(
-        self, url: str, session: ClientSession
+        self, url: str, session: ClientSession,
+        chatbot: Chatbot
     ) -> PageContent | None:
         """
         Asynchronously extracts page content from a given URL using an HTTP session.
@@ -98,15 +104,20 @@ class Crawler:
             content = article.text
             title = article.title
             logging.info(f"Successfully extracted content from URL: {url}")
-            article.nlp()
-            keywords = article.keywords
-            summary = article.summary
+            llm = chatbot.llm_factory.create_llm_model("openai35")
+            chain = chatbot.chain_factory.build_knowledge_graph_chain(llm)
+            kg_tuples = await chain.ainvoke({"text_input": content})
+
+            # article.nlp()
+            # keywords = article.keywords
+            # summary = article.summary
             page_content = PageContent(
                 url=url,
                 content=content,
                 title=title,
-                keywords=keywords,
-                summary=summary,
+                # keywords=keywords,
+                # summary=summary,
+                knowledge_tuples=kg_tuples
             )
             return page_content
         except Exception as e:
@@ -115,7 +126,8 @@ class Crawler:
             return None
 
     async def async_chunk_page(
-        self, url: str, session: ClientSession, splitter: RecursiveCharacterTextSplitter
+        self, url: str, session: ClientSession, splitter: RecursiveCharacterTextSplitter,
+        chatbot: Chatbot
     ) -> PageContent:
         """
         Asynchronously chunks a page content from a given URL.
@@ -125,7 +137,7 @@ class Crawler:
         Returns:
             PageContent: The chunked page content.
         """
-        page_content = await self.extract_page_content(url, session)
+        page_content = await self.extract_page_content(url, session, chatbot)
         if page_content is not None:
             chunks = splitter.split_text(page_content.content)
             page_content.chunks = chunks
@@ -138,6 +150,7 @@ class Crawler:
         session: ClientSession,
         vector_store: AstraDB,
         splitter: RecursiveCharacterTextSplitter,
+        chatbot: Chatbot,
     ):
         """
         Asynchronously handles processing of a single URL.
@@ -148,48 +161,59 @@ class Crawler:
             vector_store (AstraDB): The LangChain AstraDB instance where data is to be stored.
         """
         async with self.semaphore:  # this will wait if there are already too many tasks running:
-            page_content = await self.async_chunk_page(url, session, splitter)
+            page_content = await self.async_chunk_page(url, session, splitter, chatbot)
             if page_content is not None:
-                if len(page_content.chunks) == 1 and len(page_content.chunks[0]) < 500:
+                if len(page_content.chunks) == 1 and len(page_content.chunks[0]) < 50:
                     print(
-                        f"Skipping page {url} with only 1 chunk under 500 characters."
+                        f"Skipping page {url} with only 1 chunk under 50 characters."
                     )
                     logging.info(
-                        f"Skipping page {url} with only 1 chunk under 500 characters."
+                        f"Skipping page {url} with only 1 chunk under 50 characters."
                     )
                 else:
-                    (
-                        path_segments,
-                        subdomain,
-                    ) = page_content.extract_url_hierarchy_and_subdomain()
-                    page_docs = [
-                        Document(
-                            page_content=chunk,
-                            metadata={
-                                "url": url,
-                                "title": page_content.title,
-                                "nlp_keywords": page_content.keywords_as_csv(),
-                                "nlp_summary": page_content.summary,
-                                "subdomain": subdomain if subdomain is not None else "",
-                                **{
-                                    f"path_segment_{i}": segment
-                                    for i, segment in enumerate(path_segments, start=1)
-                                },
-                            },
-                        )
-                        for chunk in page_content.chunks
-                    ]
-                    # async transform_documents is not available yet
-                    split_docs = splitter.transform_documents(page_docs)
-                    # vector_store.aadd_documents(split_docs) isn't yet implemented. We will work around it.
-                    # await vector_store.aadd_documents(split_docs)
-                    loop = asyncio.get_event_loop()
-                    await loop.run_in_executor(
-                        None, vector_store.add_documents, split_docs
-                    )
-                    logging.info(
-                        f"Written to database, URL: {url}, Title: {page_content.title}"
-                    )
+
+                    # Convert each Pydantic object to a JSON string and collect them into a list string
+                    # json_strings = [item.json() for item in page_content.knowledge_tuples]
+                    # json_list_string = f"[{', '.join(json_strings)}]"
+
+                    # Convert Model Instances to a DataFrame
+                    data_dicts = [item.dict() for item in page_content.knowledge_tuples]  # Convert each Pydantic object to a dictionary
+                    df = pd.DataFrame(data_dicts)
+
+                    # Write DataFrame to Parquet File
+                    parquet_file = Path('data/knowledge_tuples2.parquet')
+                    if parquet_file.exists():
+                        df.to_parquet(parquet_file, engine='fastparquet', append=True)
+                    else:
+                        df.to_parquet(parquet_file, engine='fastparquet')
+
+                    #
+                    # page_docs = [
+                    #     Document(
+                    #         page_content=chunk,
+                    #         metadata={
+                    #             "url": url,
+                    #             "title": page_content.title,
+                    #             # "nlp_keywords": page_content.keywords_as_csv(),
+                    #             # "nlp_summary": page_content.summary,
+                    #             "kg_tuples": json_list_string,
+                    #             # "subdomain": subdomain if subdomain is not None else "",
+                    #             # **{
+                    #             #     f"path_segment_{i}": segment
+                    #             #     for i, segment in enumerate(path_segments, start=1)
+                    #             # },
+                    #         },
+                    #     )
+                    #     for chunk in page_content.chunks
+                    # ]
+                    # # async transform_documents is not available yet
+                    # split_docs = splitter.transform_documents(page_docs)
+                    # # vector_store.aadd_documents(split_docs) isn't yet implemented. We will work around it.
+                    # # await vector_store.aadd_documents(split_docs)
+                    # loop = asyncio.get_event_loop()
+                    # await loop.run_in_executor(
+                    #     None, self.add_documents_with_exception_handling, vector_store, split_docs, url, page_content
+                    # )
 
         async with self.counter_lock:
             self.counter += 1
@@ -197,6 +221,22 @@ class Crawler:
             if not self.ui_update_in_progress:
                 self.ui_update_in_progress = True
             await self.update_ui(self.counter, progress_bar)
+
+    def add_documents_with_exception_handling(self, vector_store, documents, url, page_content):
+        try:
+            # Attempt to add the documents
+            result = vector_store.add_documents(documents)
+            logging.info(f"Written to database, URL: {url}, Title: {page_content.title}")
+            return result
+        except ValueError as e:
+            if "Document size limitation violated" in str(e):
+                # Handle specific document size error
+                logging.error(f"Error adding documents due to size limitation: {e}")
+            else:
+                # Log other ValueErrors
+                logging.error(f"Error adding documents: {e}")
+        except Exception as ex:
+            logging.error(f"Some other error encountered: {ex}")
 
     async def update_ui(self, counter: int, progress_bar: DeltaGenerator):
         """
@@ -223,6 +263,7 @@ class Crawler:
         progress_bar: DeltaGenerator,
         vector_store: AstraDB,
         splitter: RecursiveCharacterTextSplitter,
+        chatbot: Chatbot,
     ):
         """
         Asynchronously processes a list of URLs.
@@ -238,7 +279,7 @@ class Crawler:
             timeout=timeout
         ) as session:  # If needed, use session for HTTP requests
             tasks = [
-                self.handle_url(url, progress_bar, session, vector_store, splitter)
+                self.handle_url(url, progress_bar, session, vector_store, splitter, chatbot)
                 for url in self.urls
             ]
             await asyncio.gather(*tasks)
@@ -277,6 +318,7 @@ class Crawler:
         progress_bar: DeltaGenerator,
         vector_store: AstraDB,
         splitter: RecursiveCharacterTextSplitter,
+        chatbot: Chatbot
     ) -> None:
         """
         Executes the crawling and ingestion process in an asynchronous loop.
@@ -292,31 +334,10 @@ class Crawler:
         asyncio.set_event_loop(loop)
         try:
             loop.run_until_complete(
-                self.process_urls(progress_bar, vector_store, splitter)
+                self.process_urls(progress_bar, vector_store, splitter, chatbot)
             )
         finally:
             loop.close()
-
-    def async_crawl_and_ingest(
-        self,
-        sitemap_url: str,
-        progress_bar: DeltaGenerator,
-        vector_store: AstraDB,
-        splitter: RecursiveCharacterTextSplitter,
-    ) -> None:
-        """
-        Asynchronously crawls and ingests data from a given sitemap URL.
-
-        Parameters:
-            sitemap_url: The sitemap URL to crawl.
-            progress_bar: Streamlit UI element for progress indication.
-            vector_store: An instance of AstraDB to store the crawled data.
-
-        Returns:
-            None: This method orchestrates the crawling and ingestion process.
-        """
-        self._initialize_crawl([sitemap_url])
-        self._execute_crawl(progress_bar, vector_store, splitter)
 
     def async_crawl_and_ingest_list(
         self,
@@ -324,6 +345,7 @@ class Crawler:
         progress_bar: DeltaGenerator,
         vector_store: AstraDB,
         splitter: RecursiveCharacterTextSplitter,
+        chatbot: Chatbot
     ) -> None:
         """
         Asynchronously crawls and ingests data from a list of sitemap URLs.
@@ -337,4 +359,4 @@ class Crawler:
             None: This method orchestrates the crawling and ingestion process for multiple URLs.
         """
         self._initialize_crawl(sitemap_url_list, is_list=True)
-        self._execute_crawl(progress_bar, vector_store, splitter)
+        self._execute_crawl(progress_bar, vector_store, splitter, chatbot)

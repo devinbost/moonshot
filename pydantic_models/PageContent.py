@@ -2,14 +2,17 @@ from pydantic import BaseModel, HttpUrl
 from typing import List, Tuple, Optional
 from urllib.parse import urlparse
 
+from pydantic_models.KnowledgeTuple import KnowledgeTuple
+
 
 class PageContent(BaseModel):
     url: str
     content: str
     title: str
-    keywords: List[str]
-    summary: str
+    keywords: Optional[List[str]] = None
+    summary: Optional[str] = None
     chunks: Optional[List[str]] = None
+    knowledge_tuples: List[KnowledgeTuple] = None
 
     def keywords_as_csv(self) -> str:
         """
